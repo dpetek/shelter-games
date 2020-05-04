@@ -1,2 +1,6 @@
 *.swp
 *static/QA*
+connection.yaml
+staging_connection.yaml
+google-cloud-sdk/*
+env/*
