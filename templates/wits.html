@@ -1,0 +1,16 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}Wits and Wagers{% endblock %}
+
+{% block navbar %}
+{{nav.mynavbar.render()}}
+{% endblock %}
+
+{% block content %}
+  <h1>Active Games</h1>
+
+  {% for game in games %}
+  <p><a href="wits/game/{{ game['id'] }}"> {{ game["name"] }}</a></p>
+  {%endfor%}
+
+  <h1>Create Game</h1>
+{% endblock %}

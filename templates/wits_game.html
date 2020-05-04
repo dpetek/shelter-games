@@ -1,0 +1,32 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}Ww{% endblock %}
+
+{% block navbar %}
+{{nav.mynavbar.render()}}
+{% endblock %}
+
+{% block content %}
+<center><h1> Wits and Wagers </h1></center>
+  <center>
+  <div>
+    <img src="{{ question_file }}" width = "50%"/>
+  </div>
+  <p>
+    <a class="btn btn-primary" data-toggle="collapse" href="#answer" role="button" aria-expanded="false" aria-controls="answer">Show Answer</a>
+  </p>
+
+  <div class="row">
+    <div class="col">
+      <div class="collapse multi-collapse" id="answer">
+        <div class="card card-body">
+  	  <div>
+  	    <img src="{{ answer_file }}"  width = "50%" />
+  	  </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+    </div>
+  </div>
+  </center>
+{% endblock %}
