@@ -3,4 +3,5 @@
 connection.yaml
 staging_connection.yaml
 google-cloud-sdk/*
+cloud_sql_proxy*
 env/*
