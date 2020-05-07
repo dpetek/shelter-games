@@ -1,16 +1,108 @@
-{% extends "bootstrap/base.html" %}
+{% extends "layout.html" %}
 {% block title %}Wits and Wagers{% endblock %}
 
-{% block navbar %}
-{{nav.mynavbar.render()}}
+{% block styles %}
+{{ super() }}
 {% endblock %}
 
-{% block content %}
-  <h1>Active Games</h1>
+{% block scripts %}
+{{ super() }}
 
-  {% for game in games %}
-  <p><a href="wits/game/{{ game['id'] }}"> {{ game["name"] }}</a></p>
-  {%endfor%}
+<script type="application/javascript">
+    $(document).ready(function(){
+        $('#create-game').click(function() {
+            $.ajax({
+                url: "{{ url_for('wits_create') }}",
+                type: "POST",
+                dataType: "json",
+                data: {"name": $('#game-name').val() },
+                success: function(data) {
+                    if (data.error) {
+                        $("#error-alert").text(data.error).show();
+                        return;
+                    }
+                    $(this).val("");
+                    $("#active-games").load(location.href + " #active-games");
+                },
+                error: function(data) { 
+                    $("#error-alert").text(data.error).show();
+                }
+            });
+        });
 
-  <h1>Create Game</h1>
+        $('.delete-game').click(function(){
+             $.ajax({
+                url: "{{ url_for('wits_delete') }}",
+                type: "POST",
+                dataType: "json",
+                data: {"id": $(this).attr("value") },
+                success: function(data) {
+                    if (data.error) {
+                        $("#error-alert").text(data.error).show();
+                        return;
+                    }
+                    $("#active-games").load(location.href + " #active-games");
+                },
+                error: function(data) { 
+                    $("#error-alert").text(data.error).show();
+                }
+            });           
+        });
+    });
+</script>
+{% endblock %}
+
+{% block main_content %}
+{{super()}}
+
+<div class="row">
+    <div class="col-lg-2">&nbsp;</div>
+    <div class="col-lg-8">
+        <div class="alert alert-danger hidden" id="error-alert" role="alert"></div>
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                Active games
+            </div>
+            <div class="panel-body">
+                <ul class="list-group" id="active-games">
+                    {% for game in games %}
+                    <li class="list-group-item">
+                        <div class="row">
+                            <div class="col-sm-9">{{ game["name"] }}</div>
+                            <div class="col-sm-3">
+                                <button type="button" class="btn btn-default delete-game" value="{{game["id"]}}" aria-label="Left Align">
+                                    <span class="glyphicon glyphicon-remove" aria-hidden="true"></span>
+                                </button>
+                                <button type="button" class="btn btn-default enter-game" value="{{game["id"]}}" aria-label="Left Align">
+                                    <span class="glyphicon glyphicon-play" aria-hidden="true"></span>Enter
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                    {%endfor%}
+                </ul>
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                Create New Game
+            </div>
+            <div class="panel-body">
+                <div class="row">
+                    <div class="col-sm-8">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="game-name" placeholder="Game Name ...">
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="button" id="create-game">Create</button>
+                            </span>
+                        </div><!-- /input-group -->
+                    </div>
+                    <div class="col-sm-4">&nbsp;</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2">&nbsp;</div>
+</div>
 {% endblock %}

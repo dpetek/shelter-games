@@ -1,23 +1,9 @@
-# Copyright 2018 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# [START gae_python37_app]
 from flask import Flask
 from flask import render_template
 from flask import request
 from flask import url_for
 from flask import session
+from flask import jsonify
 from flask_bootstrap import Bootstrap
 from flask_nav import Nav
 from flask_nav import Nav
@@ -27,14 +13,13 @@ import sqlalchemy
 from sqlalchemy.sql import select
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 import random
-
+import os
 
 db_user = "root"
 # todo: store somewhere else
 db_pass = "<pass>"
 db_name = "witts_new"
 cloud_sql_connection_name = "wits-wagers:us-central1:dpetek-witts"
-
 
 db = sqlalchemy.create_engine(
     # Equivalent URL:
@@ -46,8 +31,6 @@ db = sqlalchemy.create_engine(
         database=db_name,
         query={"unix_socket": "/cloudsql/{}".format(cloud_sql_connection_name)},
     ),
-    # ... Specify additional properties here.
-    # ...
 )
 conn = db.connect()
 metadata = MetaData()
@@ -57,6 +40,14 @@ games = Table('game', metadata,
     Column('name', String),
     Column('state', Integer),
     Column('question', String),
+    Column('players', String),
+)
+
+users = Table('user', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('name', String),
+        Column('password', String),
+        Column('admin', Integer)
 )
 metadata.create_all(db)
 
@@ -65,8 +56,8 @@ metadata.create_all(db)
 
 def create_app():
   app = Flask(__name__)
+  app.secret_key = "super secret key"
   Bootstrap(app)
-
   return app
 
 app = create_app()
@@ -75,14 +66,29 @@ app = create_app()
 def index():
     return render_template("index.html")
 
+@app.route('/login', methods=['POST'])
+def login():
+    if "name" in session:
+        return {"error": "Already logged in. Please log-off first."}
+
+    name = request.form["username"]
+    password = request.form["password"]
+
+    # Check if user exists
+    if not user:
+        pass
+
+    session["name"] = name
+    session["user"] = user
+    session["is_admin"] = (user == "dpetek")
+
 @app.route('/codenames')
 def codenames_index():
-    return render_template("codenames.html")
+    return render_template("codenames.html", title = "Codenames")
 
 @app.route('/codename/create', methods=['POST'])
 def codenames_create():
     pass
-    
 
 @app.route('/codenames/game/<id>')
 def codenames_game(id):
@@ -95,7 +101,7 @@ def wits_index():
     active_games = []
     for game in result:
         active_games.append(game)
-    return render_template("wits.html", games = active_games)
+    return render_template("wits.html", title = "Wits & Wagers", games = active_games)
 
 @app.route('/wits/create', methods=['POST'])
 def wits_create():
@@ -105,15 +111,27 @@ def wits_create():
     stmt = sqlalchemy.text(
             "insert into game(name, state, question) values(:name, :state, :question)"
     )
+    game_name = request.form["name"]
     try:
-        with db.connect() as conn:
-            conn.execute(stmt, name = "First game", state = 2, question = qf)
+        conn.execute(stmt, name = game_name, state = 2, question = qf)
+    except Exception as e:
+        return {"error": str(e)}
+    return {"error": "","game": {"name": game_name}}
+
+@app.route('/wits/delete', methods=['POST'])
+def wits_delete():
+    print (request.form)
+    stmt = sqlalchemy.text(
+            "delete from game where id = :id"
+    )
+    try:
+        conn.execute(stmt, id = request.form["id"])
     except Exception as e:
         return {"error": str(e)}
     return {"error": ""}
 
-@app.route('/wits/advance', methods=['POST'])
-def wits_advance():
+@app.route('/wits/skip', methods=['POST'])
+def wits_skip():
     rf = random.randint(1, 3)
     rq = random.randint(1, 24)
     qf = "%d_%d" % (rf, rq)
@@ -121,36 +139,52 @@ def wits_advance():
             "update game set question = :question where id = :id"
     )
     try:
-        with db.connect() as conn:
-            conn.execute(stmt, id = 1, question = qf)
+        conn.execute(stmt, id = request.form["id"], question = qf)
     except Exception as e:
         return {"error": str(e)}
     return {"error": ""}
 
 @app.route('/wits/enter', methods=['POST'])
 def wits_enter():
-    session["name"] = request.get_json()["name"]
-    return {"user": session["name"]}
+    name = request.form["name"]
+    session["name"] = name
+    # TODO Insert into db if it doesn't exist
+    return jsonify({"user": session["name"]})
 
 @app.route('/wits/answer', methods=['POST'])
 def wits_answer():
-    session["name"] = request.get_json()["name"]
+    user = session["name"]
+    answer = request.get_json()["answer"]
     return {"user": session["name"]}
 
 @app.route('/wits/game/<id>')
 def wits_game(id = None):
-    rf = random.randint(1, 3)
-    rq = random.randint(1, 24)
-    qf = "QA%s/q%s.jpg" % (rf, rq)
-    af = "QA%s/a%s.jpg" % (rf, rq)
-    return render_template("wits_game.html",  question_file = url_for('static', filename=qf), answer_file = url_for('static', filename = af))
+    s = select([games])
+    result = conn.execute(s)
+    game = None
+    for g in result:
+        if str(g["id"]) == str(id):
+            game = g
+
+    if game == None:
+        render_template("not_found.html")
+
+    print(game)
+    parts = game["question"].split("_")
+    qf = "QA%s/q%s.jpg" % (parts[0], parts[1])
+    af = "QA%s/a%s.jpg" % (parts[0], parts[1])
+
+    return render_template("wits_game.html",
+            question_file = url_for('static', filename = qf),
+            answer_file = url_for('static', filename = af),
+            game = game)
 
 nav = Nav()
 
 @nav.navigation()
 def mynavbar():
     return Navbar(
-        'Dpetek Shelter In Place',
+        'Shelter Games',
         View('Home', 'index'),
         View('Wits And Wagers', 'wits_index'),
         View('Codenames', 'codenames_index')

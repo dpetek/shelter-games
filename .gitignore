@@ -1,4 +1,12 @@
 *.swp
+*.swi
+*.swh
+*.swj
+*.swk
+*.swl
+*.swm
+*.swn
+*.swo
 *static/QA*
 connection.yaml
 staging_connection.yaml

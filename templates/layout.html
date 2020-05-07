@@ -1,0 +1,63 @@
+{% extends "bootstrap/base.html" %}
+
+{% block styles %}
+    {{ super() }}
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+{% endblock %}
+
+{% block navbar %}
+    {{nav.mynavbar.render()}}
+{% endblock %}
+
+{% block content %}
+
+{% if user %}
+    {% block main_content %}
+        <div class="page-header">
+            <h1>{{ title }} </h1>
+        </div>
+    {% endblock %}
+{% else %}
+        <div class="page-header">
+            <h1>Login </h1>
+        </div>
+        <div class="row">
+            <div class="col-lg-2">&nbsp;</div>
+            <div class="col-lg-8">
+                <div class="alert alert-danger hidden" id="error-alert" role="alert"></div>
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        Create New Game
+                    </div>
+                    <div class="panel-body">
+                        <div class="row">
+                            <div class="col-sm-10">
+                                    <div class="row">
+                                    <div class="col col-lg-4">
+                                        <input type="text" class="form-control" id="username" placeholder="Name">
+                                    </div>
+                                    <div class="col col-lg-4">
+                                        <input type="text" class="form-control" id="password" placeholder="Password">
+                                    </div>
+                                    <div class="col col-lg-4">
+                                        <button class="btn btn-default" type="button" id="create-game">Enter</button>
+                                    </div>
+                                    </div>
+                                <hr />
+                                <div class="alert alert-info">
+                                    If user doesn't exist, new one will be created using provided password. If user exists from before, password will be verified. Please don't use your real passwords. This is just a fun project and security is definitelly not a pririty.
+                                </div>
+                            </div>
+                            <div class="col-sm-2">&nbsp;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-2">&nbsp;</div>
+        </div>
+{% endif %}
+
+{% endblock %}

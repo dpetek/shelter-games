@@ -1,7 +1,9 @@
 Flask==1.1.2
 google-cloud-storage
 flask-bootstrap
+flask-session
 flask-nav
+flask-wtf
 sqlalchemy
 Flask-SQLAlchemy
 pymysql
