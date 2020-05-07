@@ -25,7 +25,8 @@ def create_app():
 
 app = create_app()
 
-app.config.from_object('config')
+app.config.from_pyfile('config/common.py')
+app.config.from_pyfile('config/%s.py' % app.config["INSTANCE"])
 
 db = sqlalchemy.create_engine(
     # Equivalent URL:

@@ -1,4 +1,5 @@
-config.py
+config/prod.py
+config/local.py
 *static/QA*
 connection.yaml
 staging_connection.yaml
