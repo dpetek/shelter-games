@@ -1,0 +1,7 @@
+# This is just an example of a config file.
+# Rename this file into config.py
+
+DB_USER = "root"
+DB_PASSWORD = "your password"
+DB_DATABASE = "your databse"
+DB_SQL_CONNECTION_NAME = "SQL connection name (check SQL console)"

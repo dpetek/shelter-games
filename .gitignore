@@ -1,3 +1,11 @@
+config.py
+*static/QA*
+connection.yaml
+staging_connection.yaml
+google-cloud-sdk/*
+cloud_sql_proxy*
+env/*
+*.pyc
 *.swp
 *.swi
 *.swh
@@ -7,9 +15,3 @@
 *.swm
 *.swn
 *.swo
-*static/QA*
-connection.yaml
-staging_connection.yaml
-google-cloud-sdk/*
-cloud_sql_proxy*
-env/*

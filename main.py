@@ -1,58 +1,21 @@
 from flask import Flask
+from flask import jsonify
 from flask import render_template
 from flask import request
-from flask import url_for
 from flask import session
-from flask import jsonify
+from flask import url_for
 from flask_bootstrap import Bootstrap
 from flask_nav import Nav
 from flask_nav import Nav
-from flask_nav.elements import Navbar, View
+from flask_nav.elements import Navbar, View, Link, Subgroup, Text
 from markupsafe import escape
-import sqlalchemy
-from sqlalchemy.sql import select
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import select
+import re
 import random
-import os
-
-db_user = "root"
-# todo: store somewhere else
-db_pass = "<pass>"
-db_name = "witts_new"
-cloud_sql_connection_name = "wits-wagers:us-central1:dpetek-witts"
-
-db = sqlalchemy.create_engine(
-    # Equivalent URL:
-    # mysql+pymysql://<db_user>:<db_pass>@/<db_name>?unix_socket=/cloudsql/<cloud_sql_instance_name>
-    sqlalchemy.engine.url.URL(
-        drivername="mysql+pymysql",
-        username=db_user,
-        password=db_pass,
-        database=db_name,
-        query={"unix_socket": "/cloudsql/{}".format(cloud_sql_connection_name)},
-    ),
-)
-conn = db.connect()
-metadata = MetaData()
-
-games = Table('game', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('name', String),
-    Column('state', Integer),
-    Column('question', String),
-    Column('players', String),
-)
-
-users = Table('user', metadata,
-        Column('id', Integer, primary_key=True),
-        Column('name', String),
-        Column('password', String),
-        Column('admin', Integer)
-)
-metadata.create_all(db)
-
-# If `entrypoint` is not defined in app.yaml, App Engine will look for an app
-# called `app` in `main.py`.
+import sqlalchemy
 
 def create_app():
   app = Flask(__name__)
@@ -62,25 +25,95 @@ def create_app():
 
 app = create_app()
 
+app.config.from_object('config')
+
+db = sqlalchemy.create_engine(
+    # Equivalent URL:
+    # mysql+pymysql://<db_user>:<db_pass>@/<db_name>?unix_socket=/cloudsql/<cloud_sql_instance_name>
+    sqlalchemy.engine.url.URL(
+        drivername="mysql+pymysql",
+        username=app.config["DB_USER"],
+        password=app.config["DB_PASSWORD"],
+        database=app.config["DB_DATABASE"],
+        query={"unix_socket": "/cloudsql/{}".format(app.config["DB_SQL_CONNECTION_NAME"])},
+    ),
+)
+conn = db.connect()
+Session = sessionmaker(bind=db)
+db_session = Session()
+
+Base = declarative_base(bind=db)
+
+class Game(Base):
+    __tablename__ = 'game'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    state  = Column(Integer)
+    question = Column(String)
+    players = Column(String)
+
+
+class User(Base):
+    __tablename__ = 'user'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    password = Column( String)
+    admin = Column( Integer)
+
+Base.metadata.create_all(db)
+
+# If `entrypoint` is not defined in app.yaml, App Engine will look for an app
+# called `app` in `main.py`.
+
+def logged_in():
+    return ("user" in session) and session["user"]
+
+def verify_username(username):
+    return re.match("^[a-z0-9_-]{3,15}$", username)
+
+@app.before_request
+def init_all():
+    if not logged_in():
+        if "user" in session:
+            session.pop("user")
+
 @app.route('/')
 def index():
     return render_template("index.html")
 
 @app.route('/login', methods=['POST'])
 def login():
-    if "name" in session:
-        return {"error": "Already logged in. Please log-off first."}
+    if "user" in session:
+        return jsonify({"error": "Already logged in. Please log-off first."})
 
     name = request.form["username"]
     password = request.form["password"]
 
-    # Check if user exists
-    if not user:
-        pass
+    if not verify_username(name):
+        return jsonify({"error": "Wrong username format. Allowed special characters are numbers, '_' and '-'"})
 
-    session["name"] = name
-    session["user"] = user
-    session["is_admin"] = (user == "dpetek")
+    user = db_session.query(User).filter_by(name = name).first()
+    if user:
+        if str(hash(password)) != user.password:
+            return jsonify({"error": "Wrong password."})
+    else:
+        is_admin = 1 if name == "dpetek" else 0
+        user = User(name=name, password=str(hash(password)), admin = is_admin)
+        db_session.add(user)
+        db_session.commit()
+
+    session["user"] = dict({
+        "id": user.id,
+        "name": user.name,
+        "admin": user.admin
+    })
+    return jsonify({"error": ""})
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    if "user" in session:
+        session.pop("user")
+    return jsonify({"error": ""})
 
 @app.route('/codenames')
 def codenames_index():
@@ -96,7 +129,7 @@ def codenames_game(id):
 
 @app.route('/wits')
 def wits_index():
-    s = select([games])
+    s = select([Game])
     result = conn.execute(s)
     active_games = []
     for game in result:
@@ -147,7 +180,6 @@ def wits_skip():
 @app.route('/wits/enter', methods=['POST'])
 def wits_enter():
     name = request.form["name"]
-    session["name"] = name
     # TODO Insert into db if it doesn't exist
     return jsonify({"user": session["name"]})
 
@@ -159,7 +191,7 @@ def wits_answer():
 
 @app.route('/wits/game/<id>')
 def wits_game(id = None):
-    s = select([games])
+    s = select([Game])
     result = conn.execute(s)
     game = None
     for g in result:
@@ -183,12 +215,20 @@ nav = Nav()
 
 @nav.navigation()
 def mynavbar():
-    return Navbar(
+    full_navbar =  Navbar(
         'Shelter Games',
         View('Home', 'index'),
         View('Wits And Wagers', 'wits_index'),
         View('Codenames', 'codenames_index')
     )
+    if logged_in():
+        full_navbar.items.append(
+                Subgroup("Playing as %s" % session["user"]["name"],
+                         Link("Logout", "javascript:doLogout();")
+                )
+        )
+    return full_navbar
+
 nav.init_app(app)
 
 if __name__ == '__main__':
