@@ -9,13 +9,17 @@ from flask_nav import Nav
 from flask_nav import Nav
 from flask_nav.elements import Navbar, View, Link, Subgroup, Text
 from markupsafe import escape
-from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
+from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
+from constants import *
 import re
 import random
 import sqlalchemy
+
+MAX_BETS_PER_ROUND = 20
 
 def create_app():
   app = Flask(__name__)
@@ -41,7 +45,6 @@ db = sqlalchemy.create_engine(
 )
 conn = db.connect()
 Session = sessionmaker(bind=db)
-db_session = Session()
 
 Base = declarative_base(bind=db)
 
@@ -61,10 +64,43 @@ class User(Base):
     password = Column( String)
     admin = Column( Integer)
 
-Base.metadata.create_all(db)
+class GamePlayer(Base):
+    __tablename__ = 'game_player'
+    id =  Column(Integer, primary_key=True)
+    game_id = Column(Integer, ForeignKey('game.id'))
+    user_id = Column(Integer, ForeignKey('user.id'))
+    game = relationship("Game")
+    user = relationship("User")
 
-# If `entrypoint` is not defined in app.yaml, App Engine will look for an app
-# called `app` in `main.py`.
+class GameBoard(Base):
+    __tablename__ = 'game_board'
+    id =  Column(Integer, primary_key=True)
+    game_id = Column(Integer, ForeignKey('game.id'))
+    game = relationship("Game")
+    question_file = Column(String)
+    answer_file = Column(String)
+    phase = Column(Integer)
+    active = Column(Integer)
+
+class BoardAnswer(Base):
+    __tablename__ = 'board_answer'
+    id =  Column(Integer, primary_key=True)
+    board_id = Column(Integer, ForeignKey('game_board.id'))
+    board = relationship("GameBoard")
+    user_id = Column(Integer, ForeignKey('user.id'))
+    user = relationship("User")
+    answer = Column(Float)
+
+class AnswerBet(Base):
+    __tablename__ = 'answer_bet'
+    id =  Column(Integer, primary_key=True)
+    answer_id = Column(Integer, ForeignKey('board_answer.id'))
+    answer = relationship("BoardAnswer")
+    user_id = Column(Integer, ForeignKey('user.id'))
+    user = relationship("User")
+    amount = Column(Integer)
+
+Base.metadata.create_all(db)
 
 def logged_in():
     return ("user" in session) and session["user"]
@@ -74,9 +110,27 @@ def verify_username(username):
 
 @app.before_request
 def init_all():
+    db_session = Session()
     if not logged_in():
         if "user" in session:
             session.pop("user")
+    else:
+        pass
+        #user = db_session.query(User).filter_by(id = session["user"]["id"]).first()
+        #if user:
+        #    session["user"] = dict({
+        #        "id": user.id,
+        #        "name": user.name,
+        #        "admin": user.admin
+        #        })
+
+
+@app.teardown_request
+def session_clear(exception=None):
+    db_session = Session()
+
+    if exception and db_session.is_active:
+        db_session.rollback()
 
 @app.route('/')
 def index():
@@ -84,6 +138,8 @@ def index():
 
 @app.route('/login', methods=['POST'])
 def login():
+    db_session = Session()
+
     if "user" in session:
         return jsonify({"error": "Already logged in. Please log-off first."})
 
@@ -98,8 +154,7 @@ def login():
         if str(hash(password)) != user.password:
             return jsonify({"error": "Wrong password."})
     else:
-        is_admin = 1 if name == "dpetek" else 0
-        user = User(name=name, password=str(hash(password)), admin = is_admin)
+        user = User(name=name, password=str(hash(password)), admin = 0)
         db_session.add(user)
         db_session.commit()
 
@@ -118,7 +173,7 @@ def logout():
 
 @app.route('/codenames')
 def codenames_index():
-    return render_template("codenames.html", title = "Codenames")
+    return render_template("codenames/codenames.html", title = "Codenames")
 
 @app.route('/codename/create', methods=['POST'])
 def codenames_create():
@@ -126,42 +181,50 @@ def codenames_create():
 
 @app.route('/codenames/game/<id>')
 def codenames_game(id):
-    return render_template("codenames.html")
+    return render_template("codenames/codenames.html")
 
 @app.route('/wits')
 def wits_index():
-    s = select([Game])
-    result = conn.execute(s)
-    active_games = []
-    for game in result:
-        active_games.append(game)
-    return render_template("wits.html", title = "Wits & Wagers", games = active_games)
+    db_session = Session()
+    active_games = db_session.query(Game).filter_by(state = 1).all()
+    joined_games = db_session.query(GamePlayer).filter_by(user_id = int(session["user"]["id"]))
+
+    my_games = [joined.game_id for joined in joined_games]
+
+    return render_template("wits/wits.html", title = "Wits & Wagers", games = active_games, my_games = my_games)
 
 @app.route('/wits/create', methods=['POST'])
 def wits_create():
-    rf = random.randint(1, 3)
-    rq = random.randint(1, 24)
-    qf = "%d_%d" % (rf, rq)
-    stmt = sqlalchemy.text(
-            "insert into game(name, state, question) values(:name, :state, :question)"
+    db_sessoin = Session()
+    game = Game(
+        name = request.form["name"],
+        state = 1,
     )
-    game_name = request.form["name"]
-    try:
-        conn.execute(stmt, name = game_name, state = 2, question = qf)
-    except Exception as e:
-        return {"error": str(e)}
-    return {"error": "","game": {"name": game_name}}
+    db_session.add(game)
+    db_session.commit()
+
+    r3 = random.randint(1, 3)
+    r24 = random.randint(1, 24)
+    question_file = "QA%d/q%d.jpg" % (r3, r24)
+    answer_file = "QA%d/a%d.jpg" % (r3, r24)
+    board = GameBoard(
+        game_id = game.id,       
+        question_file = question_file,
+        answer_file = answer_file,
+        phase = ANSWERING_PHASE,
+        active = 1
+    )
+    db_session.add(board)
+    db_session.commit()
+
+    return {"error": ""}
 
 @app.route('/wits/delete', methods=['POST'])
 def wits_delete():
-    print (request.form)
-    stmt = sqlalchemy.text(
-            "delete from game where id = :id"
-    )
-    try:
-        conn.execute(stmt, id = request.form["id"])
-    except Exception as e:
-        return {"error": str(e)}
+    db_session = Session()
+
+    db_session.query(Game).filter_by(id = request.form["id"]).update({"state": 2})
+    db_session.commit()
     return {"error": ""}
 
 @app.route('/wits/skip', methods=['POST'])
@@ -180,37 +243,132 @@ def wits_skip():
 
 @app.route('/wits/enter', methods=['POST'])
 def wits_enter():
-    name = request.form["name"]
-    # TODO Insert into db if it doesn't exist
-    return jsonify({"user": session["name"]})
+    db_session = Session()
+
+    id = request.form["id"]
+    game_player = GamePlayer(
+        game_id = int(id),
+        user_id = int(session["user"]["id"])
+    )
+    db_session.add(game_player)
+    db_session.commit()
+    return jsonify({"error": "", "game_id": id})
 
 @app.route('/wits/answer', methods=['POST'])
 def wits_answer():
-    user = session["name"]
-    answer = request.get_json()["answer"]
-    return {"user": session["name"]}
+    db_session = Session()
+
+    board_id = request.form["board_id"]
+    answer_value = request.form["answer_value"]
+
+    board = db_session.query(GameBoard).filter_by(id = board_id).first()
+    if not board:
+        return jsonify({"error", "You can't answer anymore on this question."})
+
+    answer = db_session.query(BoardAnswer).filter_by(user_id = int(session["user"]["id"]), board_id = int(board_id)).first()
+    if answer:
+        return jsonify("error", "You already answered %f." % round(answer.answer, 1))
+
+    answer = BoardAnswer(
+            board_id = int(board_id),
+            user_id = int(session["user"]["id"]),
+            answer = answer_value
+            )
+    db_session.add(answer)
+    db_session.commit()
+
+    return jsonify({"error": ""})
+
+@app.route('/wits/bet', methods=['POST'])
+def wits_bet():
+    db_session = Session()
+
+    board_id = request.form["board_id"]
+    amount = int(request.form["amount"])
+    answer_id = request.form["answer_id"]
+
+    board_bets = db_session.query(AnswerBet).select_from(GameBoard).filter(User.id == session["user"]["id"]).all()
+    board_bets_total = 0
+    if board_bets:
+        board_bets_total = sum(b.amount for b in board_bets)
+
+    if board_bets_total + amount > MAX_BETS_PER_ROUND:
+        return jsonify({"error": "You don't have enough credits left to bet %d." % amount})
+    
+    bet = db_session.query(AnswerBet).filter_by(answer_id = answer_id, user_id = session["user"]["id"]).first()
+    if not bet:
+        bet = AnswerBet(
+                user_id = int(session["user"]["id"]),
+                answer_id = int(answer_id),
+                amount = 0)
+    bet.amount += amount
+
+    #TODO Check totals
+
+    db_session.add(bet)
+    db_session.commit()
+
+    return jsonify({"error": ""})
+
+@app.route('/wits/advance', methods=['POST'])
+def wits_advance():
+    db_session = Session()
+    # TODO: only admin can do this
+
+    board_id = request.form["board_id"]
+    from_phase = int(request.form["from_phase"])
+
+    board = db_session.query(GameBoard).filter_by(id = board_id).first()
+    if not board:
+        return jsonify({"error": "Can't find the board."})
+
+    if board.phase != from_phase:
+        return jsonify({"error": "Can't advance game to this state."});
+
+    if board.phase == ANSWERING_PHASE:
+        board.phase = BETTING_PHASE
+    elif board.phase == BETTING_PHASE:
+        board.phase = ANSWER_REVEILED
+    elif board.phase == ANSWER_REVEILED:
+        board.phase = BOARD_FINALIZED
+    elif board.phase == BOARD_FINALIZED:
+        board.phase = ANSWERING_PHASE
+
+    db_session.add(board)
+    db_session.commit()
+
+    return jsonify({"error": ""})
 
 @app.route('/wits/game/<id>')
 def wits_game(id = None):
-    s = select([Game])
-    result = conn.execute(s)
-    game = None
-    for g in result:
-        if str(g["id"]) == str(id):
-            game = g
+    db_session = Session()
 
-    if game == None:
-        render_template("not_found.html")
+    if not logged_in():
+        return render_template("wits/wits_game.html", board = None)
 
-    print(game)
-    parts = game["question"].split("_")
-    qf = "QA%s/q%s.jpg" % (parts[0], parts[1])
-    af = "QA%s/a%s.jpg" % (parts[0], parts[1])
+    game = db_session.query(Game).filter_by(id = int(id)).first()
+    if not game:
+        return render_template("base/not_found.html")
 
-    return render_template("wits_game.html",
-            question_file = url_for('static', filename = qf),
-            answer_file = url_for('static', filename = af),
-            game = game)
+    # Find active game board
+    board = db_session.query(GameBoard).filter_by(game_id = id, active = 1).first()
+
+    game_bets = db_session.query(AnswerBet).select_from(GameBoard).all()
+
+    if not board:
+        return render_template("base/not_found.html", resource_name = "Game Board")
+
+    my_answer = db_session.query(BoardAnswer).filter_by(board_id = board.id, user_id = int(session["user"]["id"])).first()
+    all_answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).order_by(BoardAnswer.answer).all()
+
+    return render_template("wits/wits_game.html",
+            question_file = url_for('static', filename = board.question_file),
+            answer_file = url_for('static', filename = board.answer_file),
+            game = game,
+            board = board,
+            my_answer = my_answer,
+            all_answers = all_answers,
+            game_bets = game_bets)
 
 nav = Nav()
 
@@ -223,8 +381,11 @@ def mynavbar():
         View('Codenames', 'codenames_index')
     )
     if logged_in():
+        user_string = session["user"]["name"]
+        if session["user"]["admin"] > 0:
+            user_string += " (admin)"
         full_navbar.items.append(
-                Subgroup("Playing as %s" % session["user"]["name"],
+                Subgroup("Playing as %s" % user_string,
                          Link("Logout", "javascript:doLogout();")
                 )
         )
@@ -237,4 +398,3 @@ if __name__ == '__main__':
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
     app.run(host='127.0.0.1', port=8080, debug=True)
-# [END gae_python37_app]

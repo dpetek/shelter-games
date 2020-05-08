@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+{% extends "base/layout.html" %}
 {% block title %}Wits and Wagers{% endblock %}
 
 {% block styles %}
@@ -21,7 +21,7 @@
                         $("#error-alert").text(data.error).show();
                         return;
                     }
-                    $(this).val("");
+                    $('#game-name').val("")
                     $("#active-games").load(location.href + " #active-games");
                 },
                 error: function(data) { 
@@ -48,6 +48,25 @@
                 }
             });           
         });
+
+        $(".enter-game").click(function(){
+              $.ajax({
+                url: "{{ url_for('wits_enter') }}",
+                type: "POST",
+                dataType: "json",
+                data: {"id": $(this).attr("value") },
+                success: function(data) {
+                    if (data.error) {
+                        $("#error-alert").text(data.error).show();
+                        return;
+                    }
+                    $(location).attr('href', "wits/game/" + data.game_id);
+                },
+                error: function(data) { 
+                    $("#error-alert").text(data.error).show();
+                }
+            });           
+        });
     });
 </script>
 {% endblock %}
@@ -68,14 +87,24 @@
                     {% for game in games %}
                     <li class="list-group-item">
                         <div class="row">
-                            <div class="col-sm-9">{{ game["name"] }}</div>
+                            <div class="col-sm-9">
+                                {% if game.id in my_games %}
+                                <a href="{{ url_for('wits_game', id=game.id) }}"> {{ game.name }}</a>
+                                {% else %}
+                                    {{ game.name }}
+                                {% endif %}
+                            </div>
                             <div class="col-sm-3">
+                                {% if session["user"]["admin"] > 0 %}
                                 <button type="button" class="btn btn-default delete-game" value="{{game["id"]}}" aria-label="Left Align">
                                     <span class="glyphicon glyphicon-remove" aria-hidden="true"></span>
                                 </button>
-                                <button type="button" class="btn btn-default enter-game" value="{{game["id"]}}" aria-label="Left Align">
-                                    <span class="glyphicon glyphicon-play" aria-hidden="true"></span>Enter
-                                </button>
+                                {% endif %}
+                                {% if game.id not in my_games %}
+                                    <button type="button" class="btn btn-default enter-game" value="{{game["id"]}}" aria-label="Left Align">
+                                        <span class="glyphicon glyphicon-play" aria-hidden="true"></span>Enter
+                                    </button>
+                                {% endif %}
                             </div>
                         </div>
                     </li>
@@ -83,7 +112,7 @@
                 </ul>
             </div>
         </div>
-
+        {% if session["user"]["admin"] > 0 %}
         <div class="panel panel-default">
             <div class="panel-heading">
                 Create New Game
@@ -102,6 +131,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
     </div>
     <div class="col-lg-2">&nbsp;</div>
 </div>
