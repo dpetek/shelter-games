@@ -1,0 +1,46 @@
+body {
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-size: 14px;
+    line-height: 1.42857143;
+    color: #333;
+    background-color: #f0f0f0;
+}
+
+.navbar {
+    margin-bottom: 0px;
+}
+.container-fluid {
+}
+.no-padding {
+  padding: 5px;
+}
+.margin-sm {
+  margin-left: 3px;
+}
+
+.answer-card {
+    border-width:4px;  
+    border-style:double;
+}
+.answer-card .panel-body {
+}
+.answer-card .panel-body .betting-table {
+    margin-bottom: -20px;
+    margin-top: 15px;
+}
+
+.answer-badge {
+    background-color: green;
+}
+
+.user-bet {
+    margin: 3px;
+}
+
+.wide-img {
+  width: 100%;
+}
+
+.lg-font {
+    font-size: 20px;
+}

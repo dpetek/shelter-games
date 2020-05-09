@@ -5,11 +5,13 @@ from flask import request
 from flask import session
 from flask import url_for
 from flask_bootstrap import Bootstrap
+from flask_cors import CORS
 from flask_nav import Nav
 from flask_nav import Nav
 from flask_nav.elements import Navbar, View, Link, Subgroup, Text
+from flask_restful import Api, Resource
 from markupsafe import escape
-from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Float
+from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Float, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +22,7 @@ import random
 import sqlalchemy
 
 MAX_BETS_PER_ROUND = 20
+INITIAL_GAME_COINS = 5
 
 def create_app():
   app = Flask(__name__)
@@ -31,6 +34,7 @@ app = create_app()
 
 app.config.from_pyfile('config/common.py')
 app.config.from_pyfile('config/%s.py' % app.config["INSTANCE"])
+CORS(app)
 
 db = sqlalchemy.create_engine(
     # Equivalent URL:
@@ -56,6 +60,14 @@ class Game(Base):
     question = Column(String)
     players = Column(String)
 
+def game_to_dict(game):
+    return dict({
+        "id": game.id,
+        "name": game.name,
+        "state": game.state,
+        "question": game.question
+    })
+
 
 class User(Base):
     __tablename__ = 'user'
@@ -64,6 +76,14 @@ class User(Base):
     password = Column( String)
     admin = Column( Integer)
 
+def user_to_dict(user):
+    return dict({
+        "id": user.id,
+        "name": user.name,
+        "admin": user.admin
+    })
+
+
 class GamePlayer(Base):
     __tablename__ = 'game_player'
     id =  Column(Integer, primary_key=True)
@@ -71,6 +91,19 @@ class GamePlayer(Base):
     user_id = Column(Integer, ForeignKey('user.id'))
     game = relationship("Game")
     user = relationship("User")
+    coins = Column(Integer)
+    num_wins = Column(Integer)
+
+def player_to_dict(player):
+    return dict({
+        "id": player.id,
+        "game_id": player.game_id,
+        "user_id": player.user_id,
+        "game": game_to_dict(player.game) if player.game else None,
+        "user": user_to_dict(player.user) if player.user else None,
+        "coins": player.coins,
+        "num_wins": player.num_wins
+    })
 
 class GameBoard(Base):
     __tablename__ = 'game_board'
@@ -81,6 +114,19 @@ class GameBoard(Base):
     answer_file = Column(String)
     phase = Column(Integer)
     active = Column(Integer)
+    answer = Column(Float)
+
+def board_to_dict(board):
+    return dict({
+        "id": board.id,
+        "game_id": board.game_id,
+        "question_file": board.question_file,
+        "answer_file": board.answer_file,
+        "phase": board.phase,
+        "active": board.active,
+        "answer": board.answer
+    })
+            
 
 class BoardAnswer(Base):
     __tablename__ = 'board_answer'
@@ -90,6 +136,7 @@ class BoardAnswer(Base):
     user_id = Column(Integer, ForeignKey('user.id'))
     user = relationship("User")
     answer = Column(Float)
+    won = Column(Integer)
 
 class AnswerBet(Base):
     __tablename__ = 'answer_bet'
@@ -99,6 +146,14 @@ class AnswerBet(Base):
     user_id = Column(Integer, ForeignKey('user.id'))
     user = relationship("User")
     amount = Column(Integer)
+
+def answer_bet_to_dict(answer_bet):
+    return dict({
+        "id": answer_bet.id,
+        "answer_id": answer_bet.answer_id,
+        "user": user_to_dict(answer_bet.user) if answer_bet.user else None,
+        "amount": answer_bet.amount
+    })
 
 Base.metadata.create_all(db)
 
@@ -179,12 +234,19 @@ def codenames_index():
 def codenames_create():
     pass
 
+@app.route('/wits/game', methods=['GET'])
+def get_board():
+    game = db_session.query(Game).first()
+    return jsonify(game)
+
 @app.route('/codenames/game/<id>')
 def codenames_game(id):
     return render_template("codenames/codenames.html")
 
 @app.route('/wits')
 def wits_index():
+    if not logged_in():
+        return render_template("wits/wits.html")
     db_session = Session()
     active_games = db_session.query(Game).filter_by(state = 1).all()
     joined_games = db_session.query(GamePlayer).filter_by(user_id = int(session["user"]["id"]))
@@ -193,16 +255,7 @@ def wits_index():
 
     return render_template("wits/wits.html", title = "Wits & Wagers", games = active_games, my_games = my_games)
 
-@app.route('/wits/create', methods=['POST'])
-def wits_create():
-    db_sessoin = Session()
-    game = Game(
-        name = request.form["name"],
-        state = 1,
-    )
-    db_session.add(game)
-    db_session.commit()
-
+def create_new_board_for_game(game, db_session):
     r3 = random.randint(1, 3)
     r24 = random.randint(1, 24)
     question_file = "QA%d/q%d.jpg" % (r3, r24)
@@ -217,6 +270,17 @@ def wits_create():
     db_session.add(board)
     db_session.commit()
 
+
+@app.route('/wits/create', methods=['POST'])
+def wits_create():
+    db_session = Session()
+    game = Game(
+        name = request.form["name"],
+        state = 1,
+    )
+    db_session.add(game)
+    db_session.commit()
+    create_new_board_for_game(game, db_session)
     return {"error": ""}
 
 @app.route('/wits/delete', methods=['POST'])
@@ -241,17 +305,21 @@ def wits_skip():
         return {"error": str(e)}
     return {"error": ""}
 
-@app.route('/wits/enter', methods=['POST'])
-def wits_enter():
-    db_session = Session()
-
-    id = request.form["id"]
+def create_player(game_id, user_id, db_session):
     game_player = GamePlayer(
-        game_id = int(id),
-        user_id = int(session["user"]["id"])
+        game_id = game_id,
+        user_id = user_id,
+        coins = INITIAL_GAME_COINS,
+        num_wins = 0
     )
     db_session.add(game_player)
     db_session.commit()
+
+@app.route('/wits/enter', methods=['POST'])
+def wits_enter():
+    db_session = Session()
+    id = request.form["id"]
+    game_player = create_player(id, int(session["user"]["id"]), db_session)
     return jsonify({"error": "", "game_id": id})
 
 @app.route('/wits/answer', methods=['POST'])
@@ -259,11 +327,20 @@ def wits_answer():
     db_session = Session()
 
     board_id = request.form["board_id"]
-    answer_value = request.form["answer_value"]
+
+
+    try:
+        answer_value = float(request.form["answer_value"])
+    except ValueError:
+        return jsonify({"error": "Answer value can't be parsed as a number."})
 
     board = db_session.query(GameBoard).filter_by(id = board_id).first()
     if not board:
         return jsonify({"error", "You can't answer anymore on this question."})
+
+    game_player = db_session.query(GamePlayer).filter_by(game_id = board.game_id, user_id = session["user"]["id"]).first();
+    if not game_player:
+        game_player = create_player(board.game_id, session["user"]["id"], db_session);
 
     answer = db_session.query(BoardAnswer).filter_by(user_id = int(session["user"]["id"]), board_id = int(board_id)).first()
     if answer:
@@ -284,10 +361,25 @@ def wits_bet():
     db_session = Session()
 
     board_id = request.form["board_id"]
-    amount = int(request.form["amount"])
-    answer_id = request.form["answer_id"]
+    board = db_session.query(GameBoard).filter_by(id = board_id).first()
+    if not board:
+        return jsonify({"error": "Board %s can't be found." % board_id})
 
-    board_bets = db_session.query(AnswerBet).select_from(GameBoard).filter(User.id == session["user"]["id"]).all()
+    answer_id = request.form["answer_id"]
+    answer = db_session.query(BoardAnswer).filter_by(id = answer_id).first()
+    if not answer:
+        return jsonify({"error": "Answer %s can't be found." % answer_id})
+
+    amount = int(request.form["amount"])
+
+    game_player = db_session.query(GamePlayer).filter_by(user_id = session["user"]["id"], game_id = board.game.id).first()
+    if not game_player:
+        return jsonify({"error": "Can't find player."})
+
+    if game_player.coins < amount:
+        return jsonify({"error": "You only have %d coins. Can't bet %d." % (game_player.coins, amount)})
+
+    board_bets = db_session.query(AnswerBet).select_from(GameBoard).filter(AnswerBet.id == answer.id, User.id == session["user"]["id"]).all()
     board_bets_total = 0
     if board_bets:
         board_bets_total = sum(b.amount for b in board_bets)
@@ -302,6 +394,8 @@ def wits_bet():
                 answer_id = int(answer_id),
                 amount = 0)
     bet.amount += amount
+    game_player.coins -= amount
+    db_session.add(game_player)
 
     #TODO Check totals
 
@@ -323,21 +417,91 @@ def wits_advance():
         return jsonify({"error": "Can't find the board."})
 
     if board.phase != from_phase:
-        return jsonify({"error": "Can't advance game to this state."});
+        return jsonify({"error": "Can't advance game to this state. %d %d" % (board.phase, from_phase)});
 
     if board.phase == ANSWERING_PHASE:
         board.phase = BETTING_PHASE
     elif board.phase == BETTING_PHASE:
-        board.phase = ANSWER_REVEILED
-    elif board.phase == ANSWER_REVEILED:
+        board.phase = ANSWER_VISIBLE
+    elif board.phase == ANSWER_VISIBLE:
+        try:
+            answer_value = float(request.form["answer_value"])
+        except ValueError:
+            return jsonify({"error": "Answer value can't be parsed as a number."})
+
+        all_answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).order_by(BoardAnswer.answer).all()
+
+        players = db_session.query(GamePlayer).filter_by(game_id = board.game_id).all()
+
+        winning_answer = None
+        for i in range(len(all_answers)):
+            if all_answers[i].answer <= answer_value and (i + 1 == len(all_answers) or all_answers[i+1].answer > answer_value):
+                winning_answer = all_answers[i].answer
+
+        if winning_answer:
+            for ans in all_answers:
+                if abs(ans.answer - winning_answer) < 0.01:
+                    answer_bets = db_session.query(AnswerBet).filter_by(answer_id = ans.id).all()
+                    ans.won = 1
+                    db_session.add(ans)
+                    for p in players:
+                        # Give coins to the closest (or correct) guesses
+                        if str(p.user_id) == str(ans.user_id):
+                            if abs(answer_value - winning_answer) < 0.01:
+                                p.coins += 2
+                                print ("%s gets %d coins to be completely correct." %(p.user.name, 2))
+                            else:
+                                p.coins += 1
+                                print ("%s gets %d coins to be the closest." %(p.user.name, 1))
+                        for bet in answer_bets:
+                            if str(bet.user_id) == str(p.user_id):
+                                print("%s gets %d based on %d bet." %(p.user.name, bet.amount * 2, bet.amount))
+                                p.coins += bet.amount * 2
+                        db_session.add(p)
+
+        board.answer = answer_value
         board.phase = BOARD_FINALIZED
     elif board.phase == BOARD_FINALIZED:
+        create_new_board_for_game(board.game, db_session)
+        board.active = 0
         board.phase = ANSWERING_PHASE
 
     db_session.add(board)
     db_session.commit()
 
     return jsonify({"error": ""})
+
+
+@app.route('/wits/results', methods=['POST'])
+def wits_results():
+    db_session = Session()
+    game_id = request.form["id"]
+
+    game_players = db_session.query(GamePlayer).filter_by(game_id = game_id).order_by(desc(GamePlayer.coins)).all()
+
+    p = []
+    for player in game_players:
+        p.append(player_to_dict(player))
+    return jsonify({"players": p})
+
+@app.route('/wits/answer_bets', methods=['POST'])
+def wits_bets():
+    db_session = Session()
+    answer_id = request.form["answer_id"]
+
+    bets = db_session.query(AnswerBet).filter_by(answer_id = answer_id).order_by(desc(AnswerBet.amount)).all()
+    a = []
+    for bet in bets:
+        a.append(answer_bet_to_dict(bet))
+    return jsonify({"bets": a})
+
+
+def normalize_answer(value):
+    fv = float(value)
+    if abs(float(value) - int(value)) < 0.01:
+        return str(int(value))
+    return value
+
 
 @app.route('/wits/game/<id>')
 def wits_game(id = None):
@@ -361,6 +525,8 @@ def wits_game(id = None):
     my_answer = db_session.query(BoardAnswer).filter_by(board_id = board.id, user_id = int(session["user"]["id"])).first()
     all_answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).order_by(BoardAnswer.answer).all()
 
+    game_players = db_session.query(GamePlayer).filter_by(game_id = game.id).order_by(desc(GamePlayer.coins)).all()
+
     return render_template("wits/wits_game.html",
             question_file = url_for('static', filename = board.question_file),
             answer_file = url_for('static', filename = board.answer_file),
@@ -368,7 +534,9 @@ def wits_game(id = None):
             board = board,
             my_answer = my_answer,
             all_answers = all_answers,
-            game_bets = game_bets)
+            game_bets = game_bets,
+            norm_answer = normalize_answer,
+            game_players = game_players)
 
 nav = Nav()
 
