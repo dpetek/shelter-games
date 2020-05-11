@@ -46,6 +46,8 @@ db = sqlalchemy.create_engine(
         database=app.config["DB_DATABASE"],
         query={"unix_socket": "/cloudsql/{}".format(app.config["DB_SQL_CONNECTION_NAME"])},
     ),
+    pool_size = 30,
+    max_overflow = 10
 )
 conn = db.connect()
 Session = sessionmaker(bind=db)
@@ -138,6 +140,17 @@ class BoardAnswer(Base):
     answer = Column(Float)
     won = Column(Integer)
 
+def answer_to_dict(answer):
+    return dict({
+        "id": answer.id,
+        "board_id": answer.board_id,
+        "board": board_to_dict(answer.board) if answer.board else None,
+        "user_id": answer.user_id,
+        "user": user_to_dict(answer.user) if answer.user else None,
+        "answer": answer.answer,
+        "won": answer.won
+    })
+
 class AnswerBet(Base):
     __tablename__ = 'answer_bet'
     id =  Column(Integer, primary_key=True)
@@ -189,7 +202,7 @@ def session_clear(exception=None):
 
 @app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('gen/index.html')
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -328,7 +341,6 @@ def wits_answer():
 
     board_id = request.form["board_id"]
 
-
     try:
         answer_value = float(request.form["answer_value"])
     except ValueError:
@@ -420,6 +432,12 @@ def wits_advance():
         return jsonify({"error": "Can't advance game to this state. %d %d" % (board.phase, from_phase)});
 
     if board.phase == ANSWERING_PHASE:
+        answer_low = BoardAnswer(
+            board_id = board.id,
+            user_id = int(session["user"]["id"]),
+            answer = -98778
+        )
+        db_session.add(answer_low)
         board.phase = BETTING_PHASE
     elif board.phase == BETTING_PHASE:
         board.phase = ANSWER_VISIBLE
@@ -484,6 +502,26 @@ def wits_results():
         p.append(player_to_dict(player))
     return jsonify({"players": p})
 
+@app.route('/wits/wits_answers', methods=['POST'])
+def wits_answers():
+    db_session = Session()
+    game_id = request.form["game_id"]
+
+    board = db_session.query(GameBoard).filter_by(game_id = game_id, active = 1).first()
+    answers = []
+    if board.phase == 1:
+        answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).all()
+    else:
+        answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).order_by(desc(GameAnswer.answer)).all()
+
+    a = []
+    for answer in answers:
+        ad = answer_to_dict(answer)
+        if board.phase == 1 and str(answer.user_id) != str(session["user"]["id"]):
+            del ad["answer"]
+        a.append(ad)
+    return jsonify({"answers": a})
+
 @app.route('/wits/answer_bets', methods=['POST'])
 def wits_bets():
     db_session = Session()
@@ -495,6 +533,12 @@ def wits_bets():
         a.append(answer_bet_to_dict(bet))
     return jsonify({"bets": a})
 
+@app.route('/wits/board', methods=['POST'])
+def wits_board():
+    db_session = Session()
+    board_id = request.form["board_id"]
+    board = db_session.query(GameBoard).filter_by(id = board_id).first();
+    return jsonify(board_to_dict(board));
 
 def normalize_answer(value):
     fv = float(value)
@@ -544,19 +588,16 @@ nav = Nav()
 def mynavbar():
     full_navbar =  Navbar(
         'Shelter Games',
-        View('Home', 'index'),
-        View('Wits And Wagers', 'wits_index'),
-        View('Codenames', 'codenames_index')
+        View('Home', 'wits_index'),
     )
     if logged_in():
+        full_navbar.items.append(Text("|"))
         user_string = session["user"]["name"]
         if session["user"]["admin"] > 0:
             user_string += " (admin)"
-        full_navbar.items.append(
-                Subgroup("Playing as %s" % user_string,
-                         Link("Logout", "javascript:doLogout();")
-                )
-        )
+        full_navbar.items.append(Text("Playing as %s" % user_string))
+        full_navbar.items.append(Text("|"))
+        full_navbar.items.append(Link("Logout", "javascript:doLogout();"))
     return full_navbar
 
 nav.init_app(app)

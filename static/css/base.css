@@ -25,7 +25,8 @@ body {
 .answer-card .panel-body {
 }
 .answer-card .panel-body .betting-table {
-    margin-bottom: -20px;
+    margin-bottom: -5px;
+    margin-left: -5px;
     margin-top: 15px;
 }
 
@@ -43,4 +44,13 @@ body {
 
 .lg-font {
     font-size: 20px;
+}
+
+.btn-circle {
+    width: 35px;
+    height: 30px;
+    padding: 2px 4px;
+    border-radius: 35px;
+    font-size: 14px;
+    line-height: 1.33;
 }

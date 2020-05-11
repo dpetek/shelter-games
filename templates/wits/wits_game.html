@@ -37,6 +37,55 @@
             });               
         }
 
+        function refreshAnswers() {
+            $.ajax({
+                url: "{{ url_for('wits_answers') }}",
+                type: "POST",
+                dataType: "json",
+                data: {"game_id": "{{ game.id }}"},
+                success: function(data) {
+                    if (data.error) {
+                        console.log("Error fetching results: " + data.error)
+                        return;
+                    }
+                    $("#answers-container").html("");
+                    data.answers.forEach(function(row) {
+                    var valueHtml = '<span class="glyphicon glyphicon-question-sign"></span>';
+
+                    var userName = '';
+                    if (row.answer == -987654321){
+                        valueHtml = "Lower";
+                        userName = "<nobody>"
+                    } else if (row.user_id.toString() == '{{ session["user"]["id"] }}') {
+                        valueHtml = row.answer;
+                        if (row.answer != -98778) {
+                            userName = row.user.name + ' (you)';
+                        }
+                    }
+                    $("#answers-container").append($("<div class='col-sm-3'>").html(
+                                    '<div class="panel panel-default">' +
+                                        '<div class="panel-body no-padding" >' +
+                                            '<div class="container-fluid">' +
+                                                '<h4 class="p-answer">' +
+                                                    '<span class="badge badge-primary lg-font answer-bage">' +
+                                                        valueHtml +
+                                                    '</span>' +
+                                                '</h4>' +
+                                                '<h5 class="p-user">by ' + userName +
+                                                '</h5>' +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>' + 
+                                '</div>'));
+                    });
+                },
+                error: function(data) { 
+                    console.log("Error fetching results (.error): " + data)
+                }
+            });                      
+        
+        }
+
         function updateBets() {
             $(".wits-game-bets").each(function(){
                 var that = $(this);
@@ -50,15 +99,38 @@
                             $("#error-alert").text(data.error).show();
                             return;
                         }
-                        that.html("");
+                        $("#answer-bets-" + that.attr("answer_id") + " li").remove();
                         data.bets.forEach(function(row){
-                            that.append($('<div clas="user-bet">')).html(row.user.name + row.amount);
+                            $("#answer-bets-" + row.answer_id).append($("<li class='list-group-item'>").html(
+                                "<span class='badge'>" + row.amount + "</span>" + row.user.name
+                            ));
                         });
                     },
                     error: function(data) { 
                         $("#error-alert").text(data.error).show();
                     }
                 });
+            });
+        }
+
+        function refreshPhase() {
+            $.ajax({
+                url: "{{ url_for('wits_board') }}",
+                type: "POST",
+                dataType: "json",
+                data: {"board_id": "{{board.id}}" },
+                success: function(data) {
+                    if (data.error) {
+                        $("#error-alert").text(data.error).show();
+                        return;
+                    }
+                    if (data.phase.toString() != "{{board.phase}}") {
+                        location.reload(true);
+                    }
+                },
+                error: function(data) { 
+                    $("#error-alert").text(data.error).show();
+                }
             });
         }
 
@@ -93,7 +165,8 @@
                             $("#answer-error-alert").text(data.error).show();
                             return;
                         }
-                        location.reload(true);
+                        $("#your-answer-panel").remove();
+                        refreshAnswers();
                     },
                     error: function(data) { 
                         $("#error-alert").text(data.error).show();
@@ -197,21 +270,16 @@
                 }); 
             });
 
-            {% if board.phase == 1 %}
-                setInterval(function(){
-                    $("#answers-container-full").load(location.href + " #answers-container-full");
-                }, 3000);
-            {% endif %}
-
-            {% if board.phase == 9 %}
+            {% if board.phase == 2 %}
                 setInterval(function(){
                     updateBets();
-                }, 3000);               
+                }, 6000);               
             {% endif %}
             setInterval(function(){
                 refreshScores();
-            }, 3000);
+            }, 20000);
 
+            setInterval(function() {refreshPhase();}, 5000);
         });
     </script>
 {% endblock %}
@@ -252,7 +320,7 @@
 
         <!-- YOUR ANSWER PANEL -->
         {% if not my_answer and board.phase == 1 %}
-        <div class="container-fluid">
+        <div class="container-fluid" id = "your-answer-panel">
             <div class="col-lg-1">&nbsp;</div>
             <div class="col-lg-11">
                 <div class="alert alert-danger collapse" id="answer-error-alert" role="alert"></div>
@@ -283,7 +351,7 @@
 
 
         <!-- ANSWERS LIST -->
-        {% if board.phase != 3 %}
+        {% if board.phase != 8 %}
         <div class="container-fluid" id="answers-container-full">
             <div class="col-lg-1">&nbsp;</div>
             <div class="col-lg-11">
@@ -301,50 +369,57 @@
                     <div class="panel-body bg-info" id="answers-container">
                         <div class="container-fluid">               
 
-                        {% if not all_answers %}
-                            There's no answers to vote on.
-                        {% else %}
+                        {% if all_answers %}
                             {% for ans in all_answers %}
 
                             <!-- Thumbnail begin -->
                             <div class="col-sm-3">
                                 <div class="panel panel-default answer-card">
-                                    <div class="panel-body {% if ans.won and ans.won > 0 %}bg-success{%endif%}" >
+                                    <div class="panel-body {% if ans.won and ans.won > 0 %}bg-success{%endif%} no-padding" >
                                         <div class="container-fluid">
                                             <h4 class="p-answer">
                                                 <span class="badge badge-primary lg-font answer-bage">
                                                 {% if board.phase == 1 and ans.user.id|string != session["user"]["id"]|string %}
                                                     <span class="glyphicon glyphicon-question-sign"></span>
                                                 {% else %}
-                                                    {{ norm_answer(ans.answer) }}
+                                                    {% if ans.answer == -98778 %}
+                                                        Lower
+                                                    {% else %}
+                                                        {{ norm_answer(ans.answer) }}
+                                                    {% endif %}
                                                 {% endif %}
                                                 </span>
                                                 </h4>
                                                 <h5 class="p-user">
-                                                    by {{ ans.user.name }}
+                                                    by {% if ans.answer == -98778 %} [nobody] {% else %}{{ ans.user.name }} {%endif %}
                                                     {% if ans.user.id|string == session["user"]["id"]|string %} (you){%endif%}
                                                 </h5>
                                         {% if board.phase == 2 %}
                                         <div class="container-fluid wits-game-bets" answer_id="{{ans.id}}">
+                                            <ul class="list-group" id="answer-bets-{{ans.id}}">
                                             {% for bet in game_bets %}
                                                 {% if bet.answer_id == ans.id %}
-                                                <div class="user-bet">{{bet.user.name}} <span class="badge">+{{bet.amount}}</span></div>
+                                                <li class="list-group-item">
+                                                      <span class="badge">{{bet.amount}}</span>
+                                                    {{ bet.user.name }} 
+                                                </li>
                                                 {% endif %}
                                             {% endfor %}
+                                            </ul>
                                         </div>
                                             <div class="container-fluid no-padding">
                                                 <table class="betting-table">
                                                 <tr>
                                                     <td>
-                                            <a class="btn btn-default answer-bet margin-sm"
+                                            <a class="btn btn-default answer-bet margin-sm btn-circle"
                                                      amount=1  answer="{{ ans.id }}" role="button">+1</a>
                                                     </td>
                                                     <td>
-                                            <a class="btn btn-default answer-bet margin-sm"
+                                            <a class="btn btn-default answer-bet margin-sm btn-circle"
                                                      amount=5  answer="{{ ans.id }} "role="button">+5</a>
                                                     </td>
                                                     <td>
-                                            <a class="btn btn-default answer-bet margin-sm"
+                                            <a class="btn btn-default answer-bet margin-sm btn-circle"
                                                      amount=10 answer="{{ ans.id }}" role="button">+10</a>
                                                     </td>
                                                 </tr>
