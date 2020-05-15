@@ -4,7 +4,7 @@ from flask import render_template
 from flask import request
 from flask import session
 from flask_cors import CORS
-from flask_sockets import Sockets
+from flask_socketio import SocketIO, emit, send
 from markupsafe import escape
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Float, desc, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -27,11 +27,13 @@ def create_app():
   return app
 
 app = create_app()
-sockets = Sockets(app)
 
 app.config.from_pyfile('config/common.py')
 app.config.from_pyfile('config/%s.py' % app.config["INSTANCE"])
-CORS(app)
+
+CORS(app, resources={r"/*":{"origins":"*"}})
+
+socketio = SocketIO(app, async_mode=None, cors_allowed_origins="*")
 
 db = sqlalchemy.create_engine(
     # Equivalent URL:
@@ -41,6 +43,8 @@ db = sqlalchemy.create_engine(
         username=app.config["DB_USER"],
         password=app.config["DB_PASSWORD"],
         database=app.config["DB_DATABASE"],
+        port=3306,
+        host="127.0.0.1.",
         query={"unix_socket": "/cloudsql/{}".format(app.config["DB_SQL_CONNECTION_NAME"])},
     ),
     pool_size = 30,
@@ -224,6 +228,11 @@ def create_new_board_for_game(game, db_session):
     db_session.add(board)
     return board
 
+@socketio.on('message')
+def wits_socket_connected(message):
+    print ("Client message received: ", message)
+    emit("wits", "update_board")
+
 @app.route('/')
 def index(): 
     return render_template('gen/index.html')
@@ -374,7 +383,6 @@ def api_bet_on_answer(id):
     db_session.add(game_player)
     db_session.add(bet)
     db_session.commit()
-
     return jsonify({"error": ""})
 
 @app.route('/api/wits/game/board/<id>/answer', methods = ['POST'])
@@ -539,4 +547,5 @@ if __name__ == '__main__':
     # This is used when running locally only. When deploying to Google App
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
-    app.run(host='127.0.0.1', port=8080, debug=True)
+    socketio.run(app)
+

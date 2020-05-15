@@ -159,6 +159,7 @@ export default {
     placeBet(answerId, amount) {
       try {
       this.$store.dispatch("aPlaceBet", {"answer_id": answerId, "amount": amount});
+      this.pingBoardUpdate();
       } catch (error) {
         this.betError = error;
         return;
@@ -177,6 +178,9 @@ export default {
       if (this.activeForBetting == id) {
         this.activeForBetting = null;
       }
+    },
+    pingBoardUpdate() {
+      this.$socket.send({"answers": true})
     }
   },
 
@@ -194,7 +198,7 @@ export default {
     ...mapGetters(["game", "board", "isAuthenticated", "myAnswer", "answers", "gamePlayers"])
   },
   directives: {
-  }
+  },
 };
 
 </script>

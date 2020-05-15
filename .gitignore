@@ -8,6 +8,7 @@ cloud_sql_proxy*
 env/*
 static/gen*
 
+\.main.py\.*
 *.pyc
 *.swp
 *.swi

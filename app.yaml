@@ -1,6 +1,10 @@
-runtime: python37
-# Use a special gunicorn worker class to support websockets.
-entrypoint: gunicorn -b :$PORT -k flask_sockets.worker main:app
+runtime: python
+
+env: flex
+entrypoint: gunicorn --worker-class eventlet -w 1 main:app
+
+beta_settings:
+  cloud_sql_instances: "wits-wagers:us-central1:dpetek-witts"
 
 runtime_config:
   python_version: 3

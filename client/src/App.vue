@@ -41,10 +41,27 @@ export default {
   name: 'App',
   components: {
   },
+  created: function() {
+    //console.log("Starting connection to WebSocket Server")
+    //this.connection = new WebSocket('ws://127.0.0.1:5000')
+    //
+    //this.connection.onmessage = function(event) {
+    //  console.log("Message received: ");
+    //  console.log(event);
+    //}
+    //
+    //this.connection.onopen = function(event) {
+    //  console.log(event)
+    //  console.log("Successfully connected to the echo websocket server...")
+    //  this.connection.send('Hello');
+    //}
+    //
+  },
   computed: {
     ...mapGetters(["currentUser"])
   },
   data: () => ({
+    connection: null
   })
 }
 </script>

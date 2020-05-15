@@ -1,6 +1,7 @@
 Flask==1.1.2
 gunicorn==19.3.0
-Flask-Sockets==0.2.1
+eventlet
+flask-socketio
 flask-bootstrap
 flask-cors
 flask-nav

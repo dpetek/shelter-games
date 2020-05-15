@@ -41,7 +41,6 @@ export default new Vuex.Store({
             return state.myAnswer;
         },
         gamePlayers(state) {
-            console.log("Returning game players: " + state.gamePlayers);
             return state.gamePlayers;
         }
     },
@@ -76,6 +75,19 @@ export default new Vuex.Store({
         mSetGamePlayers(state, players) {
             console.log("Storing game players: " + players);
             state.gamePlayers = players;
+        },
+
+        SOCKET_CONNECT(state) {
+            console.log("SOCKET_CONNECT: channel is connected");
+            state.isConnected = true;
+        },
+        SOCKET_DISCONNECT(state) {
+            console.log("SOCKET_DISCONNECT: channel is disconnected");
+            state.isConnected = false;
+        },
+        SOCKET_wits(state, message) {
+            console.log("SOCKET_MESSAGECHANNEL: Message: ", message);
+            state.socketMessage = message
         }
     },
     actions: {
