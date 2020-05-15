@@ -6,6 +6,8 @@ staging_connection.yaml
 google-cloud-sdk/*
 cloud_sql_proxy*
 env/*
+static/gen*
+
 *.pyc
 *.swp
 *.swi
@@ -16,3 +18,5 @@ env/*
 *.swm
 *.swn
 *.swo
+*.swe
+*.swf

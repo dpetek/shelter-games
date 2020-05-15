@@ -19,3 +19,6 @@ __pycache__/
 /setup.cfg
 cloud_sql_proxy
 env/
+client/src
+client/node_modules
+*.js.map

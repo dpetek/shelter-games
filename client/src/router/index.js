@@ -16,16 +16,34 @@ export default new Router({
       component: () => import("@/views/Login")
     },
     {
-      name: "wits",
-      path: "/wits/:slug",
+      name: "wits_index",
+      path: "/wits",
       component: () => import("@/views/Wits"),
       props: true
     },
     {
-      name: "codenames",
-      path: "/codenames/:slug",
+      name: "wits_game",
+      path: "/wits/game/:id",
+      component: () => import("@/views/WitsGame"),
+      props: true
+    },
+    {
+        name: "question_editor",
+        path: "/wits/question_editor",
+        component: () => import("@/views/WitsAddQuestion"),
+        props: true
+    },
+    {
+      name: "codenames_index",
+      path: "/codenames",
       props: true,
       component: () => import("@/views/Codenames")
+    },
+    {
+      name: "codenames_game",
+      path: "/codenames/:id",
+      props: true,
+      component: () => import("@/views/CodenamesGame")
     }
   ]
 });

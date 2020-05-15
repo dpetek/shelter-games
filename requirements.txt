@@ -11,3 +11,5 @@ google-cloud-storage
 marshmallow
 pymysql
 sqlalchemy
+flask-socketio
+
