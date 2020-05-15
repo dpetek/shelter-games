@@ -40,7 +40,7 @@ export default {
   },
   data() {
     return {
-      cardState = 0
+      cardState: 0
     }
   }
 }
