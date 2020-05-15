@@ -17,7 +17,7 @@
       <md-app-content>
           <div class="md-layout md-gutter md-alignment-top-center">
             <div class="md-layout-item md-xlarge-size-60
-              md-large-size-60 md-medium-size-80 md-small-size-100 md-xsmall-size-100  md-elevation-7"
+              md-large-size-60 md-medium-size-80 md-small-size-100 md-xsmall-size-100  md-elevation-3"
             ><router-view></router-view></div>
           </div>
       </md-app-content>
