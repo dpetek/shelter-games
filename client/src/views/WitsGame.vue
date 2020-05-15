@@ -7,7 +7,7 @@
           </md-toolbar>
 
           <!-- STEPPER -->
-          <md-steppers :md-active-step.sync="stepperActiveStep[board.phase]" md-linear md-editable=false>
+          <md-steppers :md-active-step.sync="stepperActiveStep[board.phase]" class="md-stepper-wits-game" md-linear md-editable=false>
             <md-step id="phase-answer" md-label="Answer" :md-done.sync="board.phase>1" @click="advanceGame(1)"></md-step>
             <md-step id="phase-bet" md-label="Bet" :md-done.sync="board.phase>2" @click="advanceGame(2)"></md-step>
             <md-step id="phase-score" md-label="Score"  :md-done.sync="board.phase>3" @click="advanceGame(3)"></md-step>
@@ -25,7 +25,7 @@
           <!-- /QUESTION CARD -->
 
           <!-- INPUT ANSWER -->
-          <div v-if="!myAnswer">
+          <div v-if="!myAnswer" class="user-input-container">
             <md-card class="md-card-answer">
               <md-card-content>
                 <form v-if="board.phase == 1"  myclass="md-layout" v-on:submit.prevent="addAnswer">
@@ -110,8 +110,7 @@
   .md-card-green-background {
     background-color: #e0f2f1
   }
-  .md-chip-bet-player {
-  }
+
   .md-correct-answer {
     background-color: #a5d6a7
   }

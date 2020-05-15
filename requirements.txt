@@ -1,15 +1,16 @@
 Flask==1.1.2
-Flask-SQLAlchemy
+gunicorn==19.3.0
+Flask-Sockets==0.2.1
 flask-bootstrap
 flask-cors
 flask-nav
 flask-session
-flask-wtf
-flask-triangle
 flask-restful
+Flask-SQLAlchemy
+flask-triangle
+flask-wtf
 google-cloud-storage
 marshmallow
 pymysql
 sqlalchemy
-flask-socketio
 

@@ -4,7 +4,7 @@ from flask import render_template
 from flask import request
 from flask import session
 from flask_cors import CORS
-from flask_socketio import SocketIO
+from flask_sockets import Sockets
 from markupsafe import escape
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Float, desc, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -18,16 +18,16 @@ import random
 import sqlalchemy
 
 MAX_BETS_PER_ROUND = 50
-INITIAL_GAME_COINS = 5
+INITIAL_GAME_COINS = 10
 
 def create_app():
   app = Flask(__name__)
   app.secret_key = "space-secret"
   app.config["SECRET_KEY"] = "space-secret"
-  socketio = SocketIO(app)
   return app
 
 app = create_app()
+sockets = Sockets(app)
 
 app.config.from_pyfile('config/common.py')
 app.config.from_pyfile('config/%s.py' % app.config["INSTANCE"])
@@ -533,19 +533,6 @@ def wits_advance(id):
     db_session.commit()
 
     return jsonify({"error": ""})
-
-
-@app.route('/wits/results', methods=['POST'])
-def wits_results():
-    db_session = Session()
-    game_id = request.form["id"]
-
-    game_players = db_session.query(GamePlayer).filter_by(game_id = game_id).order_by(desc(GamePlayer.coins)).all()
-
-    p = []
-    for player in game_players:
-        p.append(player_to_dict(player))
-    return jsonify({"players": p})
 
 
 if __name__ == '__main__':
