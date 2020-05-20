@@ -1,5 +1,5 @@
 Flask==1.1.2
-gunicorn==19.3.0
+gunicorn==19.5.0
 eventlet
 gevent
 flask-socketio
