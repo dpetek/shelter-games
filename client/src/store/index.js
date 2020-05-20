@@ -14,9 +14,9 @@ export default new Vuex.Store({
         board: {},
         answers: [],
         isAuthenticated: false,
-        currentUser: {},
+        currentUser: null,
+        gamePlayers: [],
         myAnswer: null,
-        gamePlayers: []
     },
     getters: {
         games (state) {
@@ -37,11 +37,11 @@ export default new Vuex.Store({
         currentUser(state) {
             return state.currentUser;
         },
-        myAnswer(state) {
-            return state.myAnswer;
-        },
         gamePlayers(state) {
             return state.gamePlayers;
+        },
+        myAnswer(state) {
+            return state.myAnswer;
         }
     },
     mutations: {
@@ -55,13 +55,15 @@ export default new Vuex.Store({
             state.board = board;
         },
         mSetAnswers(state, answers) {
-            state.answers = answers;
             state.myAnswer = null;
+            state.answers = answers;
             state.answers.forEach(function(ans){
-                if (ans.user.id == state.currentUser.id) {
-                    state.myAnswer = ans;
-                }
-            });
+            if (!ans.user || !state.currentUser) {
+                return;
+            }
+            if (ans.user.id == state.currentUser.id) {
+                state.myAnswer = ans;
+            }});
         },
 
         mSetCurrentUser(state, user) {
@@ -73,74 +75,125 @@ export default new Vuex.Store({
             }
         },
         mSetGamePlayers(state, players) {
-            console.log("Storing game players: " + players);
             state.gamePlayers = players;
         },
 
         SOCKET_CONNECT(state) {
-            console.log("SOCKET_CONNECT: channel is connected");
             state.isConnected = true;
         },
         SOCKET_DISCONNECT(state) {
-            console.log("SOCKET_DISCONNECT: channel is disconnected");
             state.isConnected = false;
-        },
-        SOCKET_wits(state, message) {
-            console.log("SOCKET_MESSAGECHANNEL: Message: ", message);
-            state.socketMessage = message
         }
     },
     actions: {
         async aFetchCurrentUser(context) {
             const { data } = await AuthService.currentUser();
-            context.commit("mSetCurrentUser", data.user);
+            if (data.error) {
+                context.commit("mSetCurrentUser", null);
+            }else {
+                context.commit("mSetCurrentUser", data.user);
+            }
         },
         async aLogin(context, name) {
             const { data } = await AuthService.login(name);
+            if (data.error) throw new Error(data.error);
+
             context.commit("mSetCurrentUser", data.user);
+        },
+        async aLogout(context) {
+            const { data } = await AuthService.logout();
+            if (data.error) throw new Error(data.error);
+
+            context.commit("mSetCurrentUser", null);
         },
         async aFetchGames(context) {
             const { data } = await WitsService.list();
+            if (data.error) throw new Error(data.error);
+            
             context.commit("mSetGames", data.games)
         },
         async aCreateGame(context, name) {
             const { data } = await WitsService.create(name);
+            if (data.error) throw new Error(data.error);
+
             var all_games = context.state.games
             all_games.push(data.game)
             context.commit("mSetGames", all_games);
         },
         async aFetchGame(context, id) {
             const { data } = await WitsService.get(id);
+            if (data.error) {
+                throw new Error(data.error);
+            }
             context.commit("mSetGame", data.game);
             context.commit("mSetBoard", data.board);
             const result  = await WitsService.getBoardAnswers(data.board.id);
+            if (data.error) {
+                throw new Error(data.error);
+            }
             context.commit("mSetAnswers", result.data.answers);
 
             const pl = await WitsService.getGamePlayers(id);
+            if (data.error) {
+                throw new Error(data.error);
+            }
             context.commit("mSetGamePlayers", pl.data.players);
         },
         async aAddAnswer(context, answer) {
-            await WitsService.addAnswer(context.state.board.id, answer);
+            const { data } = await WitsService.addAnswer(context.state.board.id, answer);
+            if (data.error) throw new Error(data.error);
             context.dispatch("aFetchAnswers");
         },
         async aFetchAnswers(context) {
             const { data } = await WitsService.getBoardAnswers(context.state.board.id);
+            if (data.error) {
+                throw new Error(data.error);
+            }
             context.commit("mSetAnswers", data.answers);
         },
         async aAdvanceGameBoard(context, answer = 0.0) {
-            await WitsService.advanceBoard(context.state.board.id, context.state.board.phase, answer);
+            const { data } = await WitsService.advanceBoard(context.state.board.id, context.state.board.phase, answer);
+            if (data.error) throw new Error(data.error);
+
             context.dispatch("aFetchGame", context.state.game.id);
         },
         async aAddQuestion(context, payload) {
-            await WitsService.addQuestion(payload);
+            const { data } = await WitsService.addQuestion(payload);
+            if (data.error) throw new Error(data.error);
         },
         async aPlaceBet(context, payload) {
-            await WitsService.placeBet(payload["answer_id"], payload);
+            const { data } = await WitsService.placeBet(payload["answer_id"], payload);
+            if (data.error) {
+                throw new Error(data.error);
+            }
             context.dispatch("aFetchGame", context.state.game.id);
         },
         async aFetchPlayers(context, game_id) {
             const { data } = await WitsService.getGamePlayers(game_id);
+            if (data.error) {
+                throw new Error(data.error);
+            }
             context.commit("mSetGamePlayers", data.players);
+        },
+        SOCKET_wits(context, message) {
+            console.log("Received socket message: ", message);
+            if (message.update) {
+                message.update.forEach(function(update_str){
+                    switch (update_str) {
+                        case "answers":
+                            context.dispatch("aFetchAnswers");
+                            break;
+                        case "leaderboard":
+                            context.dispatch("aFetchPlayers", context.state.game.id);
+                            break;
+                        case "game":
+                            context.dispatch("aFetchGame", context.state.game.id);
+                            break;
+                        default:
+                            break;
+                    }
+                });
+            }
         }
     },
 });

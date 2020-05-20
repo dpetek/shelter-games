@@ -54,6 +54,9 @@ export const AuthService = {
   },
   login(name) {
       return ApiService.post("/api/login", {"username": name});
+  },
+  logout() {
+      return ApiService.post("/api/logout");
   }
 };
 

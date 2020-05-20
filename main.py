@@ -1,3 +1,9 @@
+from eventlet.green import socket
+from eventlet.green import threading
+from eventlet.green import asyncore
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask
 from flask import jsonify
 from flask import render_template
@@ -6,6 +12,7 @@ from flask import session
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, send
 from markupsafe import escape
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Float, desc, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql.expression import func
@@ -13,12 +20,16 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import select
 from constants import *
-import re
+import logging
 import random
+import re
 import sqlalchemy
+import time
 
 MAX_BETS_PER_ROUND = 50
 INITIAL_GAME_COINS = 10
+
+ANSWER_NEGATIVE_LIMIT = -1000000
 
 def create_app():
   app = Flask(__name__)
@@ -33,7 +44,7 @@ app.config.from_pyfile('config/%s.py' % app.config["INSTANCE"])
 
 CORS(app, resources={r"/*":{"origins":"*"}})
 
-socketio = SocketIO(app, async_mode=None, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode="eventlet")
 
 db = sqlalchemy.create_engine(
     # Equivalent URL:
@@ -51,27 +62,21 @@ db = sqlalchemy.create_engine(
     max_overflow = 10
 )
 conn = db.connect()
-Session = sessionmaker(bind=db)
 
 Base = declarative_base(bind=db)
 
-class Game(Base):
+class ApiResource():
+    def as_dict(self, db_session = None):
+        ret = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return ret
+
+class Game(Base, ApiResource):
     __tablename__ = 'game'
     id = Column(Integer, primary_key=True)
     name = Column(String)
     state  = Column(Integer)
-    question = Column(String)
-    players = Column(String)
 
-def game_to_dict(game):
-    return dict({
-        "id": game.id,
-        "name": game.name,
-        "state": game.state,
-        "question": game.question
-    })
-
-class WitsQuestion(Base):
+class WitsQuestion(Base, ApiResource):
     __tablename__ = 'wits_question'
     id = Column(Integer, primary_key=True)
     question = Column(Text)
@@ -79,116 +84,109 @@ class WitsQuestion(Base):
     notes = Column(Text)
     category = Column(String)
 
-def question_to_dict(question, board = None):
-    return dict({
-        "id": question.id,
-        "question": question.question,
-        "answer": question.answer if not board or board.phase >= 2 else None,
-        "notes": question.notes,
-        "category": question.category
-    })
-
-class User(Base):
+class User(Base, ApiResource):
     __tablename__ = 'user'
     id = Column(Integer, primary_key=True)
     name = Column(String)
     password = Column( String)
     admin = Column( Integer)
 
-def user_to_dict(user):
-    return dict({
-        "id": user.id,
-        "name": user.name,
-        "admin": user.admin
-    })
 
-
-class GamePlayer(Base):
+class GamePlayer(Base, ApiResource):
     __tablename__ = 'game_player'
     id =  Column(Integer, primary_key=True)
     game_id = Column(Integer, ForeignKey('game.id'))
     user_id = Column(Integer, ForeignKey('user.id'))
-    game = relationship("Game")
-    user = relationship("User")
     coins = Column(Integer)
     num_wins = Column(Integer)
 
-def player_to_dict(player):
-    return dict({
-        "id": player.id,
-        "game_id": player.game_id,
-        "user_id": player.user_id,
-        "game": game_to_dict(player.game) if player.game else None,
-        "user": user_to_dict(player.user) if player.user else None,
-        "coins": player.coins,
-        "num_wins": player.num_wins
-    })
+    def as_dict(self, db_session):
+        ret = super(GamePlayer, self).as_dict(db_session)
+        if not db_session:
+            return ret
+        if self.game_id:
+            game = db_session.query(Game).filter(Game.id == self.game_id).first()
+            ret["game"] = game.as_dict(None)
+        if self.user_id:
+            user = db_session.query(User).filter(User.id == self.user_id).first()
+            ret["user"] = user.as_dict(None)
+        return ret
 
-class GameBoard(Base):
+    
+class GameBoard(Base, ApiResource):
     __tablename__ = 'game_board'
     id =  Column(Integer, primary_key=True)
     game_id = Column(Integer, ForeignKey('game.id'))
-    game = relationship("Game")
+    #game = relationship("Game", lazy="subquery")
     question_file = Column(String)
     answer_file = Column(String)
     phase = Column(Integer)
     active = Column(Integer)
     question_id = Column(Integer, ForeignKey("wits_question.id"))
-    question = relationship("WitsQuestion")
+    #question = relationship("WitsQuestion", lazy="subquery")
     answer = Column(Float)
 
-def board_to_dict(board):
-    return dict({
-        "id": board.id,
-        "game_id": board.game_id,
-        "question_file": board.question_file,
-        "answer_file": board.answer_file,
-        "phase": board.phase,
-        "active": board.active,
-        "answer": board.answer,
-        "question": question_to_dict(board.question, board) if board.question else None
-    })
-            
+    def as_dict(self, db_session):
+        ret = super(GameBoard, self).as_dict(db_session)
+        if not db_session:
+            return ret
+        if self.question_id:
+            question = db_session.query(WitsQuestion).filter(WitsQuestion.id == self.question_id).first()
+            ret["question"] = question.as_dict(None)
+        if self.game_id:
+            game = db_session.query(Game).filter(Game.id == self.game_id).first()
+            ret["game"] = game.as_dict(None)
+        return ret
 
-class BoardAnswer(Base):
+class BoardAnswer(Base, ApiResource):
     __tablename__ = 'board_answer'
     id =  Column(Integer, primary_key=True)
     board_id = Column(Integer, ForeignKey('game_board.id'))
-    board = relationship("GameBoard")
     user_id = Column(Integer, ForeignKey('user.id'))
-    user = relationship("User")
     answer = Column(Float)
     won = Column(Integer)
+    odds = Column(Integer)
 
-def answer_to_dict(answer):
-    return dict({
-        "id": answer.id,
-        "board_id": answer.board_id,
-        "board": board_to_dict(answer.board) if answer.board else None,
-        "user_id": answer.user_id,
-        "user": user_to_dict(answer.user) if answer.user else None,
-        "answer": answer.answer,
-        "won": answer.won
-    })
+    def as_dict(self, db_session):
+        ret = super(BoardAnswer, self).as_dict(db_session)
+        if not db_session:
+            return ret
+        if self.board_id:
+            board = db_session.query(GameBoard).filter(GameBoard.id == self.board_id).first()
+            ret["board"] = board.as_dict(None)
+        if self.user_id:
+            user = db_session.query(User).filter(User.id == self.user_id).first()
+            if user:
+                ret["user"] = user.as_dict(None)
+        return ret
 
-class AnswerBet(Base):
+class AnswerBet(Base, ApiResource):
     __tablename__ = 'answer_bet'
     id =  Column(Integer, primary_key=True)
     answer_id = Column(Integer, ForeignKey('board_answer.id'))
-    answer = relationship("BoardAnswer")
+    #answer = relationship("BoardAnswer", lazy="subquery")
     user_id = Column(Integer, ForeignKey('user.id'))
-    user = relationship("User")
+    #user = relationship("User", lazy="subquery")
     amount = Column(Integer)
 
-def answer_bet_to_dict(answer_bet):
-    return dict({
-        "id": answer_bet.id,
-        "answer_id": answer_bet.answer_id,
-        "user": user_to_dict(answer_bet.user) if answer_bet.user else None,
-        "amount": answer_bet.amount
-    })
+    def as_dict(self, db_session):
+        ret = super(AnswerBet, self).as_dict(db_session)
+        if not db_session:
+            return ret
+        if self.answer_id:
+            answer = db_session.query(BoardAnswer).filter(BoardAnswer.id == self.answer_id).first()
+            ret["answer"] = answer.as_dict(None)
+        if self.user_id:
+            user = db_session.query(User).filter(User.id == self.user_id).first()
+            ret["user"] = user.as_dict(None)
+        return ret
 
 Base.metadata.create_all(db)
+
+Session = sessionmaker(bind=db, autoflush=False)
+
+#logging.basicConfig()
+#logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 def create_player(game_id, user_id, db_session):
     game_player = GamePlayer(
@@ -230,8 +228,8 @@ def create_new_board_for_game(game, db_session):
 
 @socketio.on('message')
 def wits_socket_connected(message):
-    print ("Client message received: ", message)
-    emit("wits", "update_board")
+    # Process messages received from the client.
+    pass
 
 @app.route('/')
 def index(): 
@@ -240,7 +238,6 @@ def index():
 @app.route('/api/login', methods = ['POST'])
 def api_login():
     db_session = Session()
-
     name = request.get_json()["username"]
 
     if not verify_username(name):
@@ -249,9 +246,9 @@ def api_login():
     user = User(name=name, password=str(hash("")), admin = 0)
     db_session.add(user)
     db_session.commit()
-    session["user"] = user_to_dict(user)
+    session["user"] = user.as_dict(db_session)
 
-    return jsonify({"error": "", "user": user_to_dict(user)})
+    return jsonify({"error": "", "user": user.as_dict(db_session)})
 
 @app.route('/api/logout', methods = ['POST'])
 def api_logout():
@@ -263,11 +260,12 @@ def api_logout():
 def api_current_user():
     if not "user" in session:
         return jsonify({"error": "User is not logged in..."})
+
     db_session = Session()
     current_user = db_session.query(User).filter_by(id = session["user"]["id"]).first()
     if not current_user:
         return jsonify({"error": "User is not logged in."})
-    return jsonify({"error": "", "user": user_to_dict(current_user)})
+    return jsonify({"error": "", "user": current_user.as_dict(db_session)})
 
 @app.route('/api/wits/games', methods = ['GET'])
 @app.route('/api/wits/games/', methods = ['GET'])
@@ -276,7 +274,7 @@ def api_get_wits_games():
     games = db_session.query(Game).filter_by(state = 1).all()
     g = []
     for game in games:
-        g.append(game_to_dict(game))
+        g.append(game.as_dict(db_session))
     return jsonify({"games": g})
 
 @app.route('/api/wits/game/<id>', methods = ['GET'])
@@ -290,46 +288,54 @@ def api_get_wits_game(id):
     if not board:
         return jsonify({"error": "Game board not found."})
 
-    return jsonify({"error": "", "game": game_to_dict(game), "board": board_to_dict(board)})
+    return jsonify({"error": "", "game": game.as_dict(db_session), "board": board.as_dict(db_session)})
 
 @app.route('/api/wits/game/<id>/players', methods = ['GET'])
 def api_get_wits_game_players(id):
     db_session = Session()
     players = db_session.query(GamePlayer).filter_by(game_id = id).order_by(desc(GamePlayer.coins)).all()
     p = []
+    
     for player in players:
-        p.append(player_to_dict(player))
+        p.append(player.as_dict(db_session))
+
     return jsonify({"error": "", "players": p})
 
 @app.route('/api/wits/game/board/<id>/answers', methods = ['GET'])
 def api_get_board_answers(id):
     db_session = Session()
-    answers = db_session.query(BoardAnswer).filter_by(board_id = id).all()
-    ids = [a.id for a in answers]
-    board_bets = db_session.query(AnswerBet).filter(AnswerBet.answer_id.in_(ids)).all()
 
-    for bet in board_bets:
-        print("Found bet: board: %d answer:%d bet:%d amount:%d" % (bet.answer.board.id, bet.answer.id, bet.id, bet.amount))
+    board = db_session.query(GameBoard).filter_by(id = id).first()
+    if not board:
+        return jsonify({"error": "Board can't be found."})
+
+    answers = db_session.query(BoardAnswer).filter_by(board_id = id).order_by(BoardAnswer.answer).all()
+
+    ids = [a.id for a in answers]
+    board_bets = Session().query(AnswerBet).filter(AnswerBet.answer_id.in_(ids)).all()
 
     a = []
     for answer in answers:
-        answer_dict = answer_to_dict(answer)
+        if board.phase == 1:
+            if not "user" in session or str(answer.user_id) != str(session["user"]["id"]):
+                answer.answer = None
+        answer_dict = answer.as_dict(db_session)
         for bet in board_bets:
-            if str(bet.answer.id) == str(answer_dict["id"]):
+            if str(bet.answer_id) == str(answer_dict["id"]):
                 if not "bets" in answer_dict:
                     answer_dict["bets"] = []
-                answer_dict["bets"].append(answer_bet_to_dict(bet))
+                answer_dict["bets"].append(bet.as_dict(db_session))
         a.append(answer_dict)
-        
-    return jsonify({"error": "", "answers": a})
+
+    ret = jsonify({"error": "", "answers": a})
+    return ret
 
 @app.route('/api/wits/game/answer/<id>/bet', methods = ['POST'])
 def api_bet_on_answer(id):
-    db_session = Session()
-
     if not "user" in session:
         return jsonify({"error": "User must be logged in to bet on answers."})
 
+    db_session = Session()
     answer = db_session.query(BoardAnswer).filter_by(id = id).first()
 
     if not answer:
@@ -342,28 +348,32 @@ def api_bet_on_answer(id):
     except ValueError:
         return jsonify({"error": "Can't parse %s as integer amount." % amount_str})
 
-    game_player = db_session.query(GamePlayer).filter_by(user_id = session["user"]["id"], game_id = answer.board.game.id).first()
+    if amount < 0:
+        return jsonify({"error": "Come on. You can't bet negative amount."});
+
+    board = db_session.query(GameBoard).filter_by(id = answer.board_id).first()
+    if not board:
+        return jsonify({"error": "Board can't be found."});
+
+    game_player = db_session.query(GamePlayer).filter_by(user_id = session["user"]["id"], game_id = board.game_id).first()
     if not game_player:
         game_player = GamePlayer(
-            game_id = answer.board.game.id,
+            game_id = board.game_id,
             user_id = session["user"]["id"],
             coins = INITIAL_GAME_COINS,
             num_wins = 0
         )
-        db_session.add(game_player)
 
-    answers = db_session.query(BoardAnswer).filter_by(board_id = answer.board.id).all()
+    answers = db_session.query(BoardAnswer).filter_by(board_id = answer.board_id).all()
     ids = [a.id for a in answers]
 
     user_board_bets = db_session.query(AnswerBet).filter_by(user_id = session["user"]["id"]).filter(AnswerBet.answer_id.in_(ids)).all()
-    for b in user_board_bets:
-        print("User board bets %s" % b.user.name)
 
     board_bets_total = 0
     answer_bets_total = 0
     if user_board_bets:
-        board_bets_total = sum(b.amount for b in user_board_bets if b.answer.id != answer.id)
-        answer_bets_total = sum(b.amount for b in user_board_bets if b.answer.id == answer.id)
+        board_bets_total = sum(b.amount for b in user_board_bets if b.answer_id != answer.id)
+        answer_bets_total = sum(b.amount for b in user_board_bets if b.answer_id == answer.id)
 
     if board_bets_total + amount > MAX_BETS_PER_ROUND:
         return jsonify({"error": "Maximum bet amount per round is %d." % MAX_BETS_PER_ROUND})
@@ -383,6 +393,9 @@ def api_bet_on_answer(id):
     db_session.add(game_player)
     db_session.add(bet)
     db_session.commit()
+    socketio.emit("wits", {"update": ["answers", "leaderboard"]}, broadcast=True)
+    print ("Broadcase emmited: answers, leaderboard") 
+
     return jsonify({"error": ""})
 
 @app.route('/api/wits/game/board/<id>/answer', methods = ['POST'])
@@ -394,6 +407,9 @@ def api_add_answers(id):
         answer_value = float(request.get_json()["answer"])
     except ValueError:
         return jsonify({"error": "Answer value can't be parsed as a number."})
+
+    if answer_value <= ANSWER_NEGATIVE_LIMIT:
+        return jsonify({"error": "Answer has to be larger than -1e6."})
 
     board = db_session.query(GameBoard).filter_by(id = board_id).first()
     if not board:
@@ -415,7 +431,8 @@ def api_add_answers(id):
     db_session.add(answer)
     db_session.commit()
 
-    return jsonify({"error": "", "answer": answer_to_dict(answer)})
+    socketio.emit("wits", {"update": ["answers"]}, broadcast=True)
+    return jsonify({"error": "", "answer": answer.as_dict(db_session)})
 
 @app.route('/api/wits/add_question', methods = ['POST'])
 def api_add_question():
@@ -438,45 +455,30 @@ def api_add_question():
             )
     db_session.add(q)
     db_session.commit()
-
     return jsonify({"error": ""})
 
 @app.route('/codenames/game/<id>')
 def codenames_game(id):
     return render_template("codenames/codenames.html")
 
-@app.route('/wits')
-def wits_index():
-    if not logged_in():
-        return render_template("wits/wits.html")
-    db_session = Session()
-    active_games = db_session.query(Game).filter_by(state = 1).all()
-    joined_games = db_session.query(GamePlayer).filter_by(user_id = int(session["user"]["id"]))
-
-    my_games = [joined.game_id for joined in joined_games]
-
-    return render_template("wits/wits.html", title = "Wits & Wagers", games = active_games, my_games = my_games)
-
 @app.route('/api/wits/create', methods=['POST'])
 def wits_create():
-    db_session = Session()
     game = Game(
         name = request.get_json()["name"],
         state = 1,
     )
     db_session.add(game)
-    db_session.commit()
+
     new_board = create_new_board_for_game(game, db_session)
     db_session.add(new_board)
     db_session.commit()
-    return {"error": "", "game": game_to_dict(game)}
+    return {"error": "", "game": game.as_dict(db_session)}
 
 @app.route('/api/wits/delete/<id>', methods=['DELETE'])
 def wits_api_delete():
-    db_session = Session()
     db_session.query(Game).filter_by(id = request.get_json()["id"]).update({"state": 2})
     db_session.commit()
-    return {"error": "", "game": game_to_dict(game)}
+    return {"error": "", "game": game.as_dict(db_session)}
 
 @app.route('/api/wits/game/board/<id>/advance', methods=['POST'])
 def wits_advance(id):
@@ -496,13 +498,56 @@ def wits_advance(id):
     if board.phase != from_phase:
         return jsonify({"error": "Can't advance game to this state. %d %d" % (board.phase, from_phase)});
 
+    game = db_session.query(Game).filter_by(id = board.game_id).first()
+
+    all_answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).order_by(BoardAnswer.answer).all()
     if board.phase == ANSWERING_PHASE:
+        # Calculate answers odds
+        if all_answers:
+            buckets = [[all_answers[0]]]
+            for i in range(1, len(all_answers)):
+                if abs(all_answers[i].answer - buckets[len(buckets) - 1][0].answer) < 0.01:
+                    buckets[len(buckets) - 1].append(all_answers[i])
+                else:
+                    buckets.append([all_answers[i]])
+            up, bt = 0, 0
+            if len(buckets) % 2 == 0:
+                up, bt = len(buckets) // 2, len(buckets) // 2 - 1
+            else:
+                up, bt = len(buckets) // 2 + 1, len(buckets) // 2 - 1
+                for answer in buckets[len(buckets) // 2]:
+                    answer.odds = 2
+                    db_session.add(answer)
+
+            odds = 3
+            while bt >= 0:
+                for answer in buckets[bt]:
+                    answer.odds = min(5, odds)
+                    db_session.add(answer)
+                for answer in buckets[up]:
+                    answer.odds = min(5, odds)
+                    db_session.add(answer)
+                odds += 1
+                bt -= 1
+                up += 1
+
+        # Add lowest answer
+        low = BoardAnswer(
+                board_id = int(board_id),
+                user_id = -1,
+                answer = ANSWER_NEGATIVE_LIMIT,
+                odds = min(odds, 6)
+                )
+        db_session.add(low)
+
         board.phase = BETTING_PHASE
     elif board.phase == BETTING_PHASE:
-        all_answers = db_session.query(BoardAnswer).filter_by(board_id = board.id).order_by(BoardAnswer.answer).all()
         players = db_session.query(GamePlayer).filter_by(game_id = board.game_id).all()
+        question = db_session.query(WitsQuestion).filter_by(id = board.question_id).first()
+        if not question:
+            return jsonify({"error": "Question can't be found."})
 
-        answer_value = board.question.answer
+        answer_value = question.answer
 
         winning_answer = None
         for i in range(len(all_answers)):
@@ -515,30 +560,33 @@ def wits_advance(id):
                     answer_bets = db_session.query(AnswerBet).filter_by(answer_id = ans.id).all()
                     ans.won = 1
                     db_session.add(ans)
+                    player_changed = False
                     for p in players:
                         # Give coins to the closest (or correct) guesses
                         if str(p.user_id) == str(ans.user_id):
+                            p.num_wins += 1
                             if abs(answer_value - winning_answer) < 0.01:
                                 p.coins += 2
-                                print ("%s gets %d coins to be completely correct." %(p.user.name, 2))
                             else:
                                 p.coins += 1
-                                print ("%s gets %d coins to be the closest." %(p.user.name, 1))
+                            player_changed = True
                         for bet in answer_bets:
                             if str(bet.user_id) == str(p.user_id):
-                                print("%s gets %d based on %d bet." %(p.user.name, bet.amount * 2, bet.amount))
-                                p.coins += bet.amount * 2
-                        db_session.add(p)
+                                p.coins += bet.amount * ans.odds
+                                player_changed = True
+                        if player_changed:
+                            db_session.add(p)
 
         board.answer = answer_value
         board.phase = BOARD_FINALIZED
     elif board.phase == BOARD_FINALIZED:
-        new_board = create_new_board_for_game(board.game, db_session)
+        new_board = create_new_board_for_game(game, db_session)
         db_session.add(new_board)
         board.active = 0
 
     db_session.add(board)
     db_session.commit()
+    socketio.emit("wits", {"update": ["game"]}, broadcast=True)
 
     return jsonify({"error": ""})
 

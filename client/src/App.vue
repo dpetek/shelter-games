@@ -2,34 +2,45 @@
   <div class="page-container">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <md-app md-waterfall md-mode="fixed-last">
-      <md-app-toolbar class="md-large md-dense md-primary">
+      <md-app-toolbar class="md-large md-dense">
         <div class="md-toolbar-row">
           <div class="md-toolbar-section-start">
-            <router-link to="/Home" class="md-title">Shelter Games</router-link>
+            <router-link :to="{name: 'Home'}" class="md-display-1">Shelter Games</router-link>
           </div>
 
-          <div class="md-toolbar-section-end">
-            Playing as {{currentUser.name}}
+          <div v-if="!!currentUser" class="md-toolbar-section-end">
+            Playing as {{currentUser.name}} | 
+            <md-button class="md-dense" @click="logout()">Change</md-button>
           </div>
         </div>
       </md-app-toolbar>
 
       <md-app-content>
           <div class="md-layout md-gutter md-alignment-top-center">
-            <div class="md-layout-item md-xlarge-size-60
-              md-large-size-60 md-medium-size-80 md-small-size-100 md-xsmall-size-100  md-elevation-3"
+            <div class="md-layout-item md-xlarge-size-80
+              md-large-size-80 md-medium-size-90 md-small-size-100 md-xsmall-size-100  md-elevation-3 main-layout-item"
             ><router-view></router-view></div>
           </div>
       </md-app-content>
     </md-app>
+
   </div>
 </template>
 
-<style lang="scss" scoped>
+<style lang="scss">
   @import "~vue-material/src/components/MdAnimation/variables";
   @import "~vue-material/src/theme/engine";
+  @import "~vue-material/src/theme/engine"; // Import the theme engine
+
+  @include md-register-theme("default", (
+    theme: dark
+  ));
+  @import "~vue-material/src/theme/all"; // Apply the theme
 
   .md-app-content {
+    min-height: 100vh;
+  }
+  .main-layout-item {
     min-height: 100vh;
   }
 </style>
@@ -42,23 +53,14 @@ export default {
   components: {
   },
   created: function() {
-    //console.log("Starting connection to WebSocket Server")
-    //this.connection = new WebSocket('ws://127.0.0.1:5000')
-    //
-    //this.connection.onmessage = function(event) {
-    //  console.log("Message received: ");
-    //  console.log(event);
-    //}
-    //
-    //this.connection.onopen = function(event) {
-    //  console.log(event)
-    //  console.log("Successfully connected to the echo websocket server...")
-    //  this.connection.send('Hello');
-    //}
-    //
   },
   computed: {
     ...mapGetters(["currentUser"])
+  },
+  methods: {
+    logout() {
+      this.$store.dispatch("aLogout");
+    }
   },
   data: () => ({
     connection: null

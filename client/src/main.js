@@ -23,7 +23,7 @@ router.beforeEach((to, from, next) =>
 const options = {};
 Vue.use(new VueSocketIO({
     debug: true,
-    connection: SocketIO('ws://localhost:5000', options),
+    connection: SocketIO('/', options),
     vuex: {
       store,
       actionPrefix: "SOCKET_",

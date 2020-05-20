@@ -29,15 +29,24 @@
         <md-card-header>
           <span class="md-title">{{name}}</span>
         </md-card-header>
-        <md-card-content>
-          <md-field class="game-input-field">
-            <label>Game code</label>
-            <md-input v-model="gameCode"></md-input>
-          </md-field>
+        
+        <md-card-content v-if="!notFinished">
+          <form v-on:submit.prevent="joinGame()">
+            <md-field v-bind:class="['game-input-field', {'md-invalid': !!joinError}]">
+              <label>Game code</label>
+              <md-input v-model="gameCode"></md-input>
+              <span class="md-error">{{joinError}}</span>
+            </md-field>
+          </form>
         </md-card-content>
-        <md-card-actions>
+        <md-card-content v-else>
+          Game is not available yet.
+        </md-card-content>
+
+        <md-card-actions v-if="!notFinished">
           <md-button @click="joinGame()">Join</md-button>
         </md-card-actions>
+
       </md-card-area>
     </md-card-media-cover>
   </md-card>
@@ -72,6 +81,9 @@
 </style>
 
 <script>
+import {
+  WitsService
+} from "@/common/api.service";
 
 export default {
   name: "GameCard",
@@ -81,11 +93,13 @@ export default {
     description: { type: String, required: false},
     resourceName: { type: String, required: true},
     routeName: { type: String, required: true},
+    notFinished: { type: Boolean, required: false}
   },
   data() {
     return {
       cardState: 0,
-      gameCode: null
+      gameCode: null,
+      joinError: null
     }
   },
   methods: {
@@ -93,6 +107,14 @@ export default {
       this.cardState = 1;
     },
     joinGame() {
+      this.joinError = null;
+      var that = this;
+      WitsService.get(this.gameCode).then(function(resp){
+        if (resp.data.error) {
+          that.joinError = resp.data.error;
+          return;
+        }
+      });
       this.$router.push({name: "wits_game", params: {"id": this.gameCode}});
     }
   }
