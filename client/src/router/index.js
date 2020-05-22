@@ -34,6 +34,12 @@ export default new Router({
         props: true
     },
     {
+        name: "question_editor_add",
+        path: "/wits/question_editor/edit/:id",
+        component: () => import("@/views/WitsAddQuestion"),
+        props: true
+    },
+    {
       name: "codenames_index",
       path: "/codenames",
       props: true,

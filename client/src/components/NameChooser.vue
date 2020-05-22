@@ -1,7 +1,7 @@
 <template>
     <md-card>
       <md-card-header>
-        <div class="md-title">Player</div>
+        <div class="md-title">Create profile for game "{{game.name}}"</div>
       </md-card-header>
       <md-card-content>
 
@@ -12,12 +12,13 @@
               <md-input v-model="name" :placeholder="chooseNamePlaceholder()"></md-input>
             </md-field>
             <md-field>
-              <md-input v-model="name" type="password" placeholder="Password"></md-input>
+              <md-input v-model="password" type="password" placeholder="Password (Optional)"></md-input>
             </md-field>
           </form>
           <div v-if="!returning" class="md-caption">Please don't use your real passwords.
-            This is only used so you can return back into the game.
+            This is only used so you can return back into the game and nobody else steals your character.
           </div>
+          <div v-if="enterError" class="md-error" style="color:red">{{enterError}}</div>
         </div>
 
         <div v-if="!returning">
@@ -36,7 +37,7 @@
       </div>
       </md-card-content>
       <md-card-actions>
-        <md-button type="submit">Enter Game</md-button>
+        <md-button @click="enterGame" class="md-primary md-raised enter-game-button">Enter Game</md-button>
       </md-card-actions>
     </md-card>
 </template>
@@ -52,6 +53,9 @@
 .choose-avatar {
   margin-top: 20px;
 }
+.enter-game-button {
+  width: 100vw;
+}
 
 </style>
 
@@ -59,18 +63,35 @@
 
 export default {
   name: "NameChooser",
+  props: {
+    game: {type: Object, required: true}
+  },
   data () {
     return {
       selectedAvatar: null,
-      returning: false
+      returning: false,
+      enterError: null
     }
   },
   methods: {
     enterGame() {
-      this.$store.dispatch("aLogin", this.name);
+      this.enterError = null;
+      this.$store.dispatch("aEnterGame", {"id": this.game.id,
+        "name": this.name, "password": this.password,
+        "avatar": this.avatarPath(this.selectedAvatar),
+        "returning": this.returning}).then(
+          () => {
+          }).catch((error) => {
+            this.enterError = error.message;
+          });
+
+
     },
     avatarPath(num) {
-      return 'static/avatars/a' + num + '.svg';
+      if (num) {
+        return 'static/avatars/a' + num + '.svg';
+      }
+      return null;
     },
     selectAvatar(num) {
       this.selectedAvatar = num;

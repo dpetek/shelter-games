@@ -28,10 +28,31 @@
 
         <md-button type="submit" class="md-primary">Create Question</md-button>
       </form>
+      <md-table>
+        <md-table-toolbar>
+          <h1 class="md-title">Questions</h1>
+        </md-table-toolbar>
+
+        <md-table-row>
+          <md-table-head>Id</md-table-head>
+          <md-table-head>Question</md-table-head>
+          <md-table-head>Notes</md-table-head>
+          <md-table-head>Answer</md-table-head>
+        </md-table-row>
+
+        <md-table-row v-for="question in questions" :key="question.id">
+          <md-table-cell>{{question.id}} </md-table-cell>
+          <md-table-cell>{{question.question}}</md-table-cell>
+          <md-table-cell>{{question.notes}}</md-table-cell>
+          <md-table-cell>{{question.answer}}</md-table-cell>
+        </md-table-row>
+      </md-table>
   </div>
 </template>
 
 <script>
+import { mapGetters } from "vuex";
+import store from "@/store";
 
 export default {
   name: "wits-question-editor",
@@ -54,6 +75,16 @@ export default {
       this.notes = null;
       this.category = null;
     }
+  },
+  beforeRouteEnter(to, from, next) {
+    Promise.all([
+      store.dispatch("aGetQuestions")
+    ]).then(() => {
+      next();
+    });
+  },
+  computed: {
+    ...mapGetters(["questions"]),
   }
 }
 

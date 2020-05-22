@@ -14,7 +14,7 @@
 
         <md-card-actions>
           <md-button @click="showJoin()">Join</md-button>
-          <md-button>Create</md-button>
+          <md-button @click="showCreate()">Create</md-button>
         </md-card-actions>
       </md-card-area>
     </md-card-media-cover>
@@ -50,6 +50,37 @@
       </md-card-area>
     </md-card-media-cover>
   </md-card>
+
+  <md-card v-if="cardState == 2" class="game-card game-card-create">
+    <md-card-media-cover md-solid>
+      <md-card-media md-ratio="16:9">
+        <img :src="thumbnail" :alt="name">
+      </md-card-media>
+      <md-card-area>
+        <md-card-header>
+          <span class="md-title">{{name}}</span>
+        </md-card-header>
+        
+        <md-card-content v-if="!notFinished">
+          <form v-on:submit.prevent="createGame()">
+            <md-field v-bind:class="['game-input-field', {'md-invalid': !!joinError}]">
+              <label>Game Name</label>
+              <md-input v-model="gameName"></md-input>
+              <span class="md-error">{{createError}}</span>
+            </md-field>
+          </form>
+        </md-card-content>
+        <md-card-content v-else>
+          Game is not available yet.
+        </md-card-content>
+
+        <md-card-actions v-if="!notFinished">
+          <md-button @click="createGame()">Create</md-button>
+        </md-card-actions>
+
+      </md-card-area>
+    </md-card-media-cover>
+  </md-card>
 </div>
 
 </template>
@@ -59,7 +90,7 @@
   display: inline-block;
 }
 .game-card {
-  width: 300px;
+  width: 340px;
   margin: 25px;
   display: inline-block;
 }
@@ -78,9 +109,18 @@
   padding-top: 0px;
 }
 
+.game-card-create .md-card-content{
+  padding-bottom: 0px;
+}
+.game-card-create .md-card-header{
+  padding-bottom: 0px;
+  padding-top: 0px;
+}
+
 </style>
 
 <script>
+import ClickOutside from 'vue-click-outside';
 import {
   WitsService
 } from "@/common/api.service";
@@ -99,12 +139,21 @@ export default {
     return {
       cardState: 0,
       gameCode: null,
-      joinError: null
+      joinError: null,
+      gameName: null,
+      createError: null
     }
   },
   methods: {
     showJoin() {
       this.cardState = 1;
+    },
+    showCreate() {
+      console.log("Changing card state to 2");
+      this.cardState = 2;
+    },
+    resetCardState() {
+      this.cardState = 0;
     },
     joinGame() {
       this.joinError = null;
@@ -116,7 +165,21 @@ export default {
         }
       });
       this.$router.push({name: "wits_game", params: {"id": this.gameCode}});
+    },
+    createGame() {
+      this.createError = null;
+      var that = this;
+      WitsService.create(this.gameName).then(function(resp){
+        if (resp.data.error) {
+          that.createError = resp.data.error;
+          return;
+        }
+        that.$router.push({name: "wits_game", params: {"id": resp.data.game.id}});
+      });
     }
+  },
+  directives: {
+    ClickOutside
   }
 }
 </script>

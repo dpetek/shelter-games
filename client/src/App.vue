@@ -8,10 +8,12 @@
             <router-link :to="{name: 'Home'}" class="md-display-1">Shelter Games</router-link>
           </div>
 
+          <!--
           <div v-if="!!currentUser" class="md-toolbar-section-end">
             Playing as {{currentUser.name}} | 
             <md-button class="md-dense" @click="logout()">Change</md-button>
           </div>
+          -->
         </div>
       </md-app-toolbar>
 

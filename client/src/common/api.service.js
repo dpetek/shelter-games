@@ -73,6 +73,14 @@ export const WitsService = {
     return ApiService.getById("/api/wits/game", id);
   },
 
+  enter(id, payload) {
+    return ApiService.post("/api/wits/game/" + id + "/enter", payload);
+  },
+
+  getCurrentGamePlayer(id) {
+    return ApiService.get("/api/wits/game/" + id + "/current_player");
+  },
+
   getBoardAnswers(board_id) {
     return ApiService.get("/api/wits/game/board/" + board_id + "/answers");
   },
@@ -85,6 +93,9 @@ export const WitsService = {
   },
   addQuestion(payload) {
     return ApiService.post("/api/wits/add_question", payload)
+  },
+  getQuestions() {
+    return ApiService.get("/api/wits/questions");
   },
   advanceBoard(board_id, from_phase, answer) {
     return ApiService.post("/api/wits/game/board/" + board_id + "/advance",

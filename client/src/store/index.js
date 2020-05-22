@@ -15,8 +15,10 @@ export default new Vuex.Store({
         answers: [],
         isAuthenticated: false,
         currentUser: null,
+        currentGamePlayer: null,
         gamePlayers: [],
         myAnswer: null,
+        questions: []
     },
     getters: {
         games (state) {
@@ -42,6 +44,13 @@ export default new Vuex.Store({
         },
         myAnswer(state) {
             return state.myAnswer;
+        },
+        currentGamePlayer(state) {
+            return state.currentGamePlayer;
+        },
+        questions(state) {
+            console.log("Returning from getter: " + state.questions);
+            return state.questions;
         }
     },
     mutations: {
@@ -58,10 +67,10 @@ export default new Vuex.Store({
             state.myAnswer = null;
             state.answers = answers;
             state.answers.forEach(function(ans){
-            if (!ans.user || !state.currentUser) {
+            if (!ans.player || !state.currentGamePlayer) {
                 return;
             }
-            if (ans.user.id == state.currentUser.id) {
+            if (ans.player.id == state.currentGamePlayer.id) {
                 state.myAnswer = ans;
             }});
         },
@@ -74,10 +83,16 @@ export default new Vuex.Store({
                 state.isAuthenticated = false;
             }
         },
+        mSetCurrentGamePlayer(state, player) {
+            state.currentGamePlayer = player;
+        },
         mSetGamePlayers(state, players) {
             state.gamePlayers = players;
         },
-
+        mSetQuestions(state, questions) {
+            console.log("Setting state question to: ", questions);
+            state.questions = questions;
+        },
         SOCKET_CONNECT(state) {
             state.isConnected = true;
         },
@@ -105,6 +120,19 @@ export default new Vuex.Store({
             if (data.error) throw new Error(data.error);
 
             context.commit("mSetCurrentUser", null);
+        },
+        async aFetchCurrentGamePlayer(context, id) {
+            const { data } = await WitsService.getCurrentGamePlayer(id);
+            if (data.error) {
+                context.commit("mSetCurrentGamePlayer", null);
+            }else {
+                context.commit("mSetCurrentGamePlayer", data.player);
+            }
+        },
+        async aEnterGame(context, payload) {
+            const { data } = await WitsService.enter(payload["id"], payload);
+            if (data.error) throw new Error(data.error);
+            context.commit("mSetCurrentGamePlayer", data.player)
         },
         async aFetchGames(context) {
             const { data } = await WitsService.list();
@@ -160,6 +188,12 @@ export default new Vuex.Store({
         async aAddQuestion(context, payload) {
             const { data } = await WitsService.addQuestion(payload);
             if (data.error) throw new Error(data.error);
+        },
+        async aGetQuestions(context) {
+            const { data } = await WitsService.getQuestions();
+            if (data.error) throw new Error(data.error);
+            console.log("Data received: ", data);
+            context.commit("mSetQuestions", data.questions);
         },
         async aPlaceBet(context, payload) {
             const { data } = await WitsService.placeBet(payload["answer_id"], payload);

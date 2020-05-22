@@ -16,10 +16,6 @@ Vue.config.productionTip = false;
 
 ApiService.init();
 
-router.beforeEach((to, from, next) =>
-  Promise.all([store.dispatch("aFetchCurrentUser")]).then(next)
-);
-
 const options = {};
 Vue.use(new VueSocketIO({
     debug: true,
