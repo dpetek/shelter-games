@@ -183,7 +183,8 @@ export default new Vuex.Store({
             const { data } = await WitsService.advanceBoard(context.state.board.id, context.state.board.phase, answer);
             if (data.error) throw new Error(data.error);
 
-            context.dispatch("aFetchGame", context.state.game.id);
+            console.log("Fetching game for: ", context.state.game.code);
+            context.dispatch("aFetchGame", context.state.game.code);
         },
         async aAddQuestion(context, payload) {
             const { data } = await WitsService.addQuestion(payload);
@@ -200,10 +201,10 @@ export default new Vuex.Store({
             if (data.error) {
                 throw new Error(data.error);
             }
-            context.dispatch("aFetchGame", context.state.game.id);
+            context.dispatch("aFetchGame", context.state.game.code);
         },
-        async aFetchPlayers(context, game_id) {
-            const { data } = await WitsService.getGamePlayers(game_id);
+        async aFetchPlayers(context, game_code) {
+            const { data } = await WitsService.getGamePlayers(game_code);
             if (data.error) {
                 throw new Error(data.error);
             }
@@ -218,10 +219,11 @@ export default new Vuex.Store({
                             context.dispatch("aFetchAnswers");
                             break;
                         case "leaderboard":
-                            context.dispatch("aFetchPlayers", context.state.game.id);
+                            context.dispatch("aFetchPlayers", context.state.game.code);
                             break;
                         case "game":
-                            context.dispatch("aFetchGame", context.state.game.id);
+                            console.log("Fetching from socket response: ", context.state.game.code)
+                            context.dispatch("aFetchGame", context.state.game.code);
                             break;
                         default:
                             break;

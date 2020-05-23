@@ -7,7 +7,11 @@
 
         <div>
           <form class="md-layout" v-on:submit.prevent="enterGame">
-            <md-switch v-model="returning" class="md-primary">Returning into the game? Check this if you already played in this game room and you want to resume your session.</md-switch>
+            <!--
+            <div>
+              <md-switch v-model="returning" class="md-primary">Returning into the game room? Check this if you already played in this game room and you want to resume your session.</md-switch>
+            </div>
+            -->
             <md-field>
               <md-input v-model="name" :placeholder="chooseNamePlaceholder()"></md-input>
             </md-field>
@@ -76,7 +80,7 @@ export default {
   methods: {
     enterGame() {
       this.enterError = null;
-      this.$store.dispatch("aEnterGame", {"id": this.game.id,
+      this.$store.dispatch("aEnterGame", {"id": this.game.code,
         "name": this.name, "password": this.password,
         "avatar": this.avatarPath(this.selectedAvatar),
         "returning": this.returning}).then(

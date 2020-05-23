@@ -174,7 +174,7 @@ export default {
           that.createError = resp.data.error;
           return;
         }
-        that.$router.push({name: "wits_game", params: {"id": resp.data.game.id}});
+        that.$router.push({name: "wits_game", params: {"id": resp.data.game.code}});
       });
     }
   },

@@ -1,30 +1,21 @@
-from eventlet.green import socket
-from eventlet.green import threading
-from eventlet.green import asyncore
-import eventlet
-eventlet.monkey_patch()
-
 from flask import Flask
-from sqlalchemy.ext.declarative import declarative_base
 from flask_cors import CORS
+from flask_socketio import SocketIO
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import sqlalchemy
 
-MAX_BETS_PER_ROUND = 50
-INITIAL_GAME_COINS = 10
 
-ANSWER_NEGATIVE_LIMIT = -1000000
-
-def create_app():
+def create_app(instance = "prod"):
   app = Flask(__name__)
   app.secret_key = "space-secret"
   app.config["SECRET_KEY"] = "space-secret"
+  app.config.from_pyfile('config/common.py')
+  app.config.from_pyfile('config/%s.py' % instance)
+  CORS(app, resources={r"/*":{"origins":"*"}})
   return app
 
 app = create_app()
-
-app.config.from_pyfile('config/common.py')
-app.config.from_pyfile('config/%s.py' % app.config["INSTANCE"])
-
-CORS(app, resources={r"/*":{"origins":"*"}})
 
 socketio = SocketIO(app, async_mode="eventlet")
 
@@ -44,5 +35,7 @@ db = sqlalchemy.create_engine(
     max_overflow = 10
 )
 conn = db.connect()
+Session = sessionmaker(bind=db, autoflush=False)
 
 Base = declarative_base(bind=db)
+

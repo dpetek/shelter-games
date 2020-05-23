@@ -35,6 +35,7 @@
 
         <md-table-row>
           <md-table-head>Id</md-table-head>
+          <md-table-head>Category</md-table-head>
           <md-table-head>Question</md-table-head>
           <md-table-head>Notes</md-table-head>
           <md-table-head>Answer</md-table-head>
@@ -42,6 +43,7 @@
 
         <md-table-row v-for="question in questions" :key="question.id">
           <md-table-cell>{{question.id}} </md-table-cell>
+          <md-table-cell>{{question.category}} </md-table-cell>
           <md-table-cell>{{question.question}}</md-table-cell>
           <md-table-cell>{{question.notes}}</md-table-cell>
           <md-table-cell>{{question.answer}}</md-table-cell>

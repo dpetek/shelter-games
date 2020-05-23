@@ -6,7 +6,6 @@
               description=""></GameCard>
     <GameCard name="Codenames"
               type="codenames"
-              notFinished=true
               thumbnail="/static/thumb/cn.jpg"
               description=""></GameCard>
   </div>

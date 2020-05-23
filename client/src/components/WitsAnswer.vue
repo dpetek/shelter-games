@@ -44,7 +44,7 @@
         </div>
 
         <div v-if="board.phase >= 2 && !bettingDialogActive" class="bets-container">
-          <div class="md-caption">Click on the card to place or adjust your bet.<span v-if="answer.bets">Answer bets:</span></div>
+          <div v-if="board.phase == 2" class="md-caption">Click on the card to place or adjust your bet.<span v-if="answer.bets">Answer bets:</span></div>
           <md-badge  v-for="bet in answer.bets" :key="bet.id" v-bind:class="[{'md-primary': board.phase == 2 || answer.won}]" :md-content="getBetString(bet)">
               <md-avatar class="md-primary md-elevation-4">
                 <img v-if="bet.player" :src="bet.player.avatar">

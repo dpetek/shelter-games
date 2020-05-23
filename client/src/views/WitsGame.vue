@@ -5,7 +5,7 @@
             <md-toolbar md-elevation="4">
               <div class="md-toolbar-row">
                 <h3 class="md-title" style="flex: 1">Wits & Wagers: {{game.name}}</h3>
-                <h3 class="md-subheading" style="flex: 1">Code: {{game.id}}</h3>
+                <h3 class="md-subheading" style="flex: 1">Code: {{game.code}}</h3>
                 <md-button v-if="!gameAdvancing" class="md-fab md-raised md-primary" @click="advanceGame(board.phase)">
                   <md-icon v-if="board.phase != 3" class="fa fa-play"></md-icon>
                   <md-icon v-else class="fa fa-forward"></md-icon>
@@ -55,7 +55,7 @@
           <md-card class="md-card-question md-card-green-background" v-if="answers && answers.length>0">
             <md-card-header>
               <div class="md-title">Answers</div>
-              <div v-if="board.phase == 2" class="md-subhead">Click to bet on answers.</div>
+              <div v-if="board.phase == 2" class="md-subhead">Click on cards to bet on answers. Remaining coins to bet this round: {{currentGamePlayer.betting_coins_remaining}}</div>
               <div v-else-if="board.phase == 3" class="md-subhead">Check your winnings/losses.</div>
             </md-card-header>
             <md-card-content>

@@ -62,7 +62,7 @@ export const AuthService = {
 
 export const WitsService = {
   list() {
-    return ApiService.get("/api/wits/games");
+    return ApiService.query("/api/wits/games");
   },
 
   create(name) {
@@ -88,8 +88,8 @@ export const WitsService = {
   addAnswer(board_id, answer) {
     return ApiService.post("/api/wits/game/board/" + board_id + "/answer", {"answer": answer});
   },
-  getGamePlayers(game_id) {
-    return ApiService.get("/api/wits/game/" + game_id + "/players");
+  getGamePlayers(code) {
+    return ApiService.get("/api/wits/game/" + code + "/players");
   },
   addQuestion(payload) {
     return ApiService.post("/api/wits/add_question", payload)
