@@ -1,3 +1,0 @@
-CODENAMES_WORDS = [
-        
-]
