@@ -39,6 +39,7 @@
           <md-table-head>Question</md-table-head>
           <md-table-head>Notes</md-table-head>
           <md-table-head>Answer</md-table-head>
+          <md-table-head>Actions</md-table-head>
         </md-table-row>
 
         <md-table-row v-for="question in questions" :key="question.id">
@@ -47,6 +48,7 @@
           <md-table-cell>{{question.question}}</md-table-cell>
           <md-table-cell>{{question.notes}}</md-table-cell>
           <md-table-cell>{{question.answer}}</md-table-cell>
+          <md-table-cell><md-button @click="deleteQuestion(question.id)">Delte</md-button>
         </md-table-row>
       </md-table>
   </div>
@@ -76,6 +78,9 @@ export default {
       this.answer = null;
       this.notes = null;
       this.category = null;
+    },
+    deleteQuestion(id) {
+      this.$store.dispatch("aDeleteQuestion", id);
     }
   },
   beforeRouteEnter(to, from, next) {

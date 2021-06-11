@@ -23,7 +23,7 @@
           <div class="md-caption">Set the bet amount for this answer:</div>
           <div class="md-layout md-alignment-top-center">
             <div class="md-layout-item md-size-20 md-alignment-top-right">
-              <md-button v-on:click.stop="decBet()" class="md-icon-button"><md-icon class="fa fa-minus"></md-icon></md-button>
+              <md-button v-if="!placingBet" v-on:click.stop="decBet()" class="md-icon-button"><md-icon class="fa fa-minus"></md-icon></md-button>
             </div>
 
             <div class="md-layout-item md-size-15">
@@ -35,11 +35,11 @@
             </div>
 
             <div class="md-layout-item md-size-20">
-              <md-button v-on:click.stop="incBet()" class="md-icon-button"><md-icon class="fa fa-plus"></md-icon></md-button>
+              <md-button v-if="!placingBet" v-on:click.stop="incBet()" class="md-icon-button"><md-icon class="fa fa-plus"></md-icon></md-button>
             </div>
           </div>
 
-          <md-button class="bet-button md-raised md-accent" v-on:click.stop="placeBet">Save</md-button>
+          <md-button v-if="!placingBet" class="bet-button md-raised md-accent" v-on:click.stop="placeBet">Save</md-button>
           <div v-if="betError" class="md-error">{{betError}}</div>
         </div>
 

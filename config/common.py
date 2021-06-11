@@ -1,1 +1,1 @@
-INSTANCE="local"
+INSTANCE="prod"

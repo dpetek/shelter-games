@@ -94,6 +94,9 @@ export const WitsService = {
   addQuestion(payload) {
     return ApiService.post("/api/wits/add_question", payload)
   },
+  deleteQuestion(id) {
+    return ApiService.delete("/api/wits/question/" + id)
+  },
   getQuestions() {
     return ApiService.get("/api/wits/questions");
   },

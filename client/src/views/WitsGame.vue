@@ -4,15 +4,21 @@
     <div v-else>
             <md-toolbar md-elevation="4">
               <div class="md-toolbar-row">
-                <h3 class="md-title" style="flex: 1">Wits & Wagers: {{game.name}}</h3>
+                <h3 class="md-title" style="flex: 1">Wits & Wagers: {{game.name}}<br/><span style="font-size: 14px;color: #81d4fa">Hi {{currentGamePlayer.name}}!</span></h3>
                 <h3 class="md-subheading" style="flex: 1">Code: {{game.code}}</h3>
-                <md-button v-if="!gameAdvancing" class="md-fab md-raised md-primary" @click="advanceGame(board.phase)">
-                  <md-icon v-if="board.phase != 3" class="fa fa-play"></md-icon>
-                  <md-icon v-else class="fa fa-forward"></md-icon>
-                </md-button>
-                <span v-else>
-                  <md-progress-spinner class="md-accent" :md-diameter="20" md-mode="indeterminate"></md-progress-spinner>
-                </span>               
+                <span v-if="currentGamePlayer.is_admin">
+                  <span v-if="board.phase == 1">Phase: Answering Questions</span>
+                  <span v-if="board.phase == 2">Phase: Betting on Answers</span>
+                  <span v-if="board.phase == 3">Phase: Correct Answer and Rewards</span>
+
+                  <md-button v-if="!gameAdvancing" class="md-fab md-raised md-primary" @click="advanceGame(board.phase)">
+                    <md-icon v-if="board.phase != 3" class="fa fa-play"></md-icon>
+                    <md-icon v-else class="fa fa-forward"></md-icon>
+                  </md-button>
+                  <span v-else>
+                    <md-progress-spinner class="md-accent" :md-diameter="20" md-mode="indeterminate"></md-progress-spinner>
+                  </span>               
+                </span>
               </div>
             </md-toolbar>
 
@@ -21,14 +27,18 @@
             <md-card-header>
               <md-card-header-text>
                 <div v-if="board.phase <= 2" class="md-title div-text-align-center">{{board.question.question}}</div>
-                <div v-if="board.phase > 2" class="md-title div-text-align-center">{{board.question.answer}}</div>
+                <div v-if="board.phase > 2" class="md-title div-text-align-center">
+                  <span v-if="board.question.answer >= 10000">{{board.question.answer | numeral('0,0')}}</span>
+                  <span v-else>{{board.question.answer}}</span>
+                </div>
                 <div v-if="board.phase > 2 && board.question.notes" class="md-caption div-text-align-center">
                   {{board.question.notes}}</div>
                 <div v-if="board.phase > 2" class="md-caption div-text-align-center">Question: {{board.question.question}}</div>
               </md-card-header-text>
 
               <md-card-media>
-                <md-icon class="md-size-4x fa fa-question-circle"></md-icon>
+                <md-icon v-if="board.question.category == 'sports'" class="md-size-4x fa fa-football-ball"></md-icon>
+                <md-icon v-else class="md-size-4x fa fa-question-circle"></md-icon>
               </md-card-media>
             </md-card-header>
           </md-card>
@@ -52,10 +62,13 @@
             </md-card>
           <!-- /INPUT ANSWER -->
       
-          <md-card class="md-card-question md-card-green-background" v-if="answers && answers.length>0">
+          <md-card class="md-card-question md-card-green-background">
             <md-card-header>
               <div class="md-title">Answers</div>
-              <div v-if="board.phase == 2" class="md-subhead">Click on cards to bet on answers. Remaining coins to bet this round: {{currentGamePlayer.betting_coins_remaining}}</div>
+
+              <md-progress-spinner v-if="fetchingGame" class="md-accent" :md-diameter="20" md-mode="indeterminate"></md-progress-spinner>
+              <div v-else-if="board.phase == 2" class="md-subhead">
+                Click on cards to bet on answers. You can bet up to 20 coins per round (if you have that many).</div>
               <div v-else-if="board.phase == 3" class="md-subhead">Check your winnings/losses.</div>
             </md-card-header>
             <md-card-content>
@@ -149,6 +162,7 @@ import WitsLeaderboard from "@/components/WitsLeaderboard";
 import store from "@/store";
 import { mapGetters } from "vuex";
 
+
 export default {
 
   data() {
@@ -163,7 +177,8 @@ export default {
       betError: null,
       answerError: null,
       answerSubmitting: false,
-      gameAdvancing: false
+      gameAdvancing: false,
+      polling: null
     }
   },
 
@@ -216,6 +231,11 @@ export default {
     },
     pingBoardUpdate() {
       this.$socket.send({"answers": true})
+    },
+    pollData () {
+      this.polling = setInterval(() => {
+        this.$store.dispatch('aMaybeRefreshGame')
+      }, 1000)
     }
   },
 
@@ -227,8 +247,21 @@ export default {
       next();
     });
   },
+  beforeDestroy() {
+    clearInterval(this.polling)
+  },
+  created() {
+    this.pollData();
+  },
   computed: {
-    ...mapGetters(["game","myAnswer", "board", "isAuthenticated", "answers", "gamePlayers", "currentGamePlayer"]),
+    ...mapGetters(["game",
+      "myAnswer",
+      "board",
+      "isAuthenticated",
+      "answers",
+      "gamePlayers",
+      "currentGamePlayer",
+      "fetchingGame"]),
     betAmount() {
       var that = this;
       var betAmounts = {};

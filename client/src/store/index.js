@@ -18,7 +18,9 @@ export default new Vuex.Store({
         currentGamePlayer: null,
         gamePlayers: [],
         myAnswer: null,
-        questions: []
+        questions: [],
+        fetchingGame: false,
+        gameStateVersion: 0
     },
     getters: {
         games (state) {
@@ -49,7 +51,6 @@ export default new Vuex.Store({
             return state.currentGamePlayer;
         },
         questions(state) {
-            console.log("Returning from getter: " + state.questions);
             return state.questions;
         }
     },
@@ -59,6 +60,9 @@ export default new Vuex.Store({
         },
         mSetGame(state, game) {
             state.game = game;
+        },
+        mSetFetchingGame(state, flag) {
+            state.fetchingGame = flag;
         },
         mSetBoard(state, board) {
             state.board = board;
@@ -90,14 +94,7 @@ export default new Vuex.Store({
             state.gamePlayers = players;
         },
         mSetQuestions(state, questions) {
-            console.log("Setting state question to: ", questions);
             state.questions = questions;
-        },
-        SOCKET_CONNECT(state) {
-            state.isConnected = true;
-        },
-        SOCKET_DISCONNECT(state) {
-            state.isConnected = false;
         }
     },
     actions: {
@@ -148,24 +145,39 @@ export default new Vuex.Store({
             all_games.push(data.game)
             context.commit("mSetGames", all_games);
         },
-        async aFetchGame(context, id) {
-            const { data } = await WitsService.get(id);
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            context.commit("mSetGame", data.game);
-            context.commit("mSetBoard", data.board);
-            const result  = await WitsService.getBoardAnswers(data.board.id);
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            context.commit("mSetAnswers", result.data.answers);
+        aFetchGame(context, id) {
+            context.commit("mSetFetchingGame", true);
+            WitsService.get(id).then(
+                ({data}) => {
+                    if (data.error) {
+                        context.commit("mSetFetchingGame", false);
+                        throw new Error(data.error);
+                    }
+                    context.commit("mSetGame", data.game);
+                    context.commit("mSetBoard", data.board);
 
-            const pl = await WitsService.getGamePlayers(id);
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            context.commit("mSetGamePlayers", pl.data.players);
+                    WitsService.getBoardAnswers(data.board.id).then(
+                        ({data}) => {
+                            if (data.error) {
+                                context.commit("mSetFetchingGame", false);
+                                throw new Error(data.error);
+                            }
+                            context.commit("mSetAnswers", data.answers);
+                            context.commit("mSetFetchingGame", false);
+                        }
+                    );
+                }
+            );
+
+            WitsService.getGamePlayers(id).then(
+                ({data}) => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    context.commit("mSetGamePlayers", data.players);
+                }
+            );
+            context.dispatch("aFetchCurrentGamePlayer", id);
         },
         async aAddAnswer(context, answer) {
             const { data } = await WitsService.addAnswer(context.state.board.id, answer);
@@ -183,17 +195,20 @@ export default new Vuex.Store({
             const { data } = await WitsService.advanceBoard(context.state.board.id, context.state.board.phase, answer);
             if (data.error) throw new Error(data.error);
 
-            console.log("Fetching game for: ", context.state.game.code);
             context.dispatch("aFetchGame", context.state.game.code);
         },
         async aAddQuestion(context, payload) {
             const { data } = await WitsService.addQuestion(payload);
             if (data.error) throw new Error(data.error);
         },
+        async aDeleteQuestion(context, id) {
+            const { data } = await WitsService.deleteQuestion(id);
+            if (data.error) throw new Error(data.error);
+            context.dipatch("aGetQuestions");
+        },
         async aGetQuestions(context) {
             const { data } = await WitsService.getQuestions();
             if (data.error) throw new Error(data.error);
-            console.log("Data received: ", data);
             context.commit("mSetQuestions", data.questions);
         },
         async aPlaceBet(context, payload) {
@@ -210,26 +225,17 @@ export default new Vuex.Store({
             }
             context.commit("mSetGamePlayers", data.players);
         },
-        SOCKET_wits(context, message) {
-            console.log("Received socket message: ", message);
-            if (message.update) {
-                message.update.forEach(function(update_str){
-                    switch (update_str) {
-                        case "answers":
-                            context.dispatch("aFetchAnswers");
-                            break;
-                        case "leaderboard":
-                            context.dispatch("aFetchPlayers", context.state.game.code);
-                            break;
-                        case "game":
-                            console.log("Fetching from socket response: ", context.state.game.code)
-                            context.dispatch("aFetchGame", context.state.game.code);
-                            break;
-                        default:
-                            break;
-                    }
-                });
+        aMaybeRefreshGame(context) {
+            WitsService.get(context.state.game.code).then(
+            ({data}) => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                if (data.board.version != context.state.board.version && !context.state.fetchingGame) {
+                    context.dispatch("aFetchGame", context.state.game.code);
+                }
             }
+        );       
         }
     },
 });

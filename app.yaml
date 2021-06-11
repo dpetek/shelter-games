@@ -1,18 +1,1 @@
-runtime: python
-
-env: flex
-entrypoint: gunicorn --worker-class eventlet -w 1 main:app
-
-beta_settings:
-  cloud_sql_instances: "wits-wagers:us-central1:dpetek-witts"
-
-manual_scaling:
-    instances: 1
-
-resources:
-  cpu: 1
-  memory_gb: 0.5
-  disk_size_gb: 10
-
-runtime_config:
-  python_version: 3
+runtime: python37

@@ -1,7 +1,7 @@
-from api_resource import ApiResource
+from models.api_resource import ApiResource
 from init import Base as DeclarativeBase
 from sqlalchemy import Column, Integer, String, Float, Text
-from common import *
+from models.common import *
 
 class Question(DeclarativeBase, ApiResource):
     __tablename__ = 'wits_question'
@@ -22,9 +22,11 @@ class Player(DeclarativeBase, ApiResource):
     user_id = Column(Integer)
     coins = Column(Integer)
     num_wins = Column(Integer)
+    is_admin = Column(Integer)
 
     def as_dict(self, db_session):
         ret = super(Player, self).as_dict(db_session)
+        del ret["password"]
         if not db_session:
             return ret
         if self.game_id:
@@ -44,6 +46,7 @@ class Board(DeclarativeBase, ApiResource):
     phase = Column(Integer)
     active = Column(Integer)
     question_id = Column(Integer)
+    version = Column(Integer)
     answer = Column(Float)
 
     def as_dict(self, db_session):

@@ -1,4 +1,4 @@
-from common_util import get_game_code
+from api.common_util import get_game_code
 from constants import *
 from flask import jsonify
 from flask import request

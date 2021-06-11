@@ -1,4 +1,4 @@
-from api_resource import ApiResource
+from models.api_resource import ApiResource
 from init import Base as DeclarativeBase
 from sqlalchemy import Column, Integer, String
 

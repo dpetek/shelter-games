@@ -1,10 +1,9 @@
+import ApiService from "./common/api.service";
 import App from './App.vue'
 import Vue from 'vue'
 import router from "./router";
 import store from "./store";
-import ApiService from "./common/api.service";
-import VueSocketIO from 'vue-socket.io'
-import SocketIO from "socket.io-client"
+import vueNumeralFilterInstaller from 'vue-numeral-filter';
 
 import VueMaterial from 'vue-material'
 import 'vue-material/dist/vue-material.min.css'
@@ -16,17 +15,7 @@ Vue.config.productionTip = false;
 
 ApiService.init();
 
-const options = {};
-Vue.use(new VueSocketIO({
-    debug: true,
-    connection: SocketIO('/', options),
-    vuex: {
-      store,
-      actionPrefix: "SOCKET_",
-      mutationPrefix: "SOCKET_"
-    }
-  })
-);
+Vue.use(vueNumeralFilterInstaller, { locale: 'en-gb' });
 
 new Vue({
   store,
